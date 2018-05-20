@@ -1,4 +1,5 @@
 import gym
+from chainer import optimizers
 
 from agents import BaseAgent
 from ..networks import VanillaCNN
@@ -10,19 +11,20 @@ from ..replays import VanillaReplay
 
 class VanillaDQNAgent(BaseAgent):
     def build(self, config):
-        self.config = config
-        self.network = VanillaCNN(n_actions)
-
         env = gym.make(config['env']['env'])
         n_actions = env.action_space.n
+
+        self.config = config
+        self.network = VanillaCNN(n_actions)  # shared by actor and learner
 
         self.replay = VanillaReplay()
         self.actor = QActor(
             env=env,
             network=self.network,
-            policy=EpsilonGreedy(action_space=env.action_space, **self.config['policy']),
+            policy=EpsilonGreedy(action_space=env.action_space, **self.config['policy']['params']),
             global_replay=self.replay)
-        self.learner = QLearner(network=self.network, gamma=self.config['learner']['gamma'])
+        optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
+        self.learner = QLearner(network=self.network, optimizer=optimizer, gamma=self.config['learner']['gamma'])
 
     def train(self):
         """同期更新なので単なるループでOK"""

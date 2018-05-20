@@ -1,4 +1,9 @@
+import numpy as np
+import chainer
+from chainer.cuda import to_cpu, to_gpu
 # from ..replays import VanillaReplay
+
+from utils import to_gpu_or_npfloat32
 
 
 class BaseActor:
@@ -57,7 +62,9 @@ class QActor(BaseActor):
         return observation
 
     def _step(self, observation):
-        q_values = self.network(observation)
+        observation = to_gpu_or_npfloat32([observation], device=self.network._device_id)
+        with chainer.no_backprop_mode():
+            q_values = to_cpu(self.network(observation)).array[0]
         action = self.policy(q_values, self.total_steps)
         new_observation, reward, done, info = self.env.step(action)
         self.total_steps += 1
