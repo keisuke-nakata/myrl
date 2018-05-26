@@ -1,4 +1,3 @@
-import gym
 from chainer import optimizers
 
 from agents import BaseAgent
@@ -10,19 +9,24 @@ from ..replays import VanillaReplay
 
 
 class VanillaDQNAgent(BaseAgent):
-    def build(self, config):
-        env = gym.make(config['env']['env'])
-        n_actions = env.action_space.n
-
+    def build(self, env, config):
+        self.env = env
         self.config = config
-        self.network = VanillaCNN(n_actions)  # shared by actor and learner
+
+        self.n_actions = env.action_space.n
+
+        self.network = VanillaCNN(self.n_actions)  # will be shared among actor and learner
 
         self.replay = VanillaReplay()
         self.actor = QActor(
             env=env,
             network=self.network,
             policy=EpsilonGreedy(action_space=env.action_space, **self.config['policy']['params']),
-            global_replay=self.replay)
+            global_replay=self.replay,
+            n_action_repeat=4,
+            obs_preprocessor=,
+            n_random_actions_at_reset=(0, 30),
+            n_stack_frames=4)
         optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
         self.learner = QLearner(network=self.network, optimizer=optimizer, gamma=self.config['learner']['gamma'])
 
@@ -31,10 +35,10 @@ class VanillaDQNAgent(BaseAgent):
         total_steps = 0
         total_episodes = 0
 
-        while total_steps < self.config['warmup_steps']:
+        while total_steps < self.config['n_warmup_steps']:
             self.actor.act()
-            total_steps = self.actor.total_steps
-            total_episodes = self.actor.total_episodes
+            # total_steps = self.actor.total_steps
+            # total_episodes = self.actor.total_episodes
 
         while total_steps < self.config['n_total_steps']:
             self.actor.act()

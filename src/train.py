@@ -1,9 +1,13 @@
+import gym
+
 import algorithms
 
 
 def train():
+    env = gym.make(config['env']['env'])
+
     agent = algorithms.vanilla_dqn.VanillaDQNAgent()
-    agent.build(config)
+    agent.build(env, config)
     agent.train()
 
 
