@@ -1,10 +1,13 @@
+import sys
+
 import gym
+import toml
 
-import algorithms
+from myrl import algorithms
 
 
-def train():
-    env = gym.make(config['env']['env'])
+def train(config, env_id):
+    env = gym.make(env_id)
 
     agent = algorithms.vanilla_dqn.VanillaDQNAgent()
     agent.build(env, config)
@@ -12,4 +15,6 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    config = toml.load(sys.argv[1])
+    env_id = sys.argv[2]  # Pong-v4
+    train(config, env_id)

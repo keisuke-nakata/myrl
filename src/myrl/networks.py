@@ -32,7 +32,7 @@ class VanillaCNN(chainer.Chain):
                 ksize=(4, 4),
                 stride=2,
                 initialW=initializer)
-            self.conv2 = L.Convolution2D(
+            self.conv3 = L.Convolution2D(
                 in_channels=64,
                 out_channels=64,
                 ksize=(3, 3),

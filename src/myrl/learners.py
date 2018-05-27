@@ -1,10 +1,7 @@
-import copy
-
 import chainer
 import chainer.functions as F
 from chainer.serializers import save_hdf5
-
-from utils import to_gpu_or_npfloat32
+from chainer.dataset.convert import to_device
 
 
 class BaseLearner:
@@ -42,38 +39,34 @@ class FittedQLearner(BaseLearner):
         """
         self.target_network_update_freq = kwargs.pop('target_network_update_freq', 10_000)
         super().__init__(*args, **kwargs)
-        self.target_network = copy.deepcopy(self.network)  # FIXME: self.network.copy(mode='copy')
-        # TODO: target_network.to_gpu()?
+        self.target_network = self.network.copy(mode='copy')
+        # TODO: target_network.to_gpu()? しなくても、たぶん勝手に同じ device に存在する状態でコピーされるっぽい？要確認
         # network と target_network は同じデバイスにいないと非常にめんどくさいかも (データのコピーが行ったり来たりするので)
 
     def _experiences2batch(self, experiences):
         if self.n_steps % self.target_network_update_freq == 0:
             self._update_target_network()
-        last_observations, actions, rewards, observations, dones = zip(*experiences)
+        states, actions, rewards, next_states, dones = zip(*experiences)
 
-        batch_x = to_gpu_or_npfloat32(last_observations, device=self.target_network._device_id)
-        batch_reward = to_gpu_or_npfloat32(rewards, device=self.target_network._device_id)
-        batch_done = to_gpu_or_npfloat32(dones, device=self.target_network._device_id)
+        batch_x = to_device(self.target_network._device_id, states)
+        batch_action = to_device(self.target_network._device_id, actions)
+        batch_next_x = to_device(self.target_network._device_id, next_states)
+        batch_reward = to_device(self.target_network._device_id, rewards)
+        batch_done = to_device(self.target_network._device_id, dones)
         with chainer.no_backprop_mode():
-            batch_target_q = self.target_network(batch_x)
+            batch_target_q = self.target_network(batch_next_x)
             batch_y = batch_reward + self.gamma * batch_done * F.max(batch_target_q, axis=1)
 
-        return (batch_x, batch_y)
+        return (batch_x, batch_y, batch_action)
 
     def _learn(self, batch):
-        batch_x, batch_y = batch
+        batch_x, batch_y, batch_action = batch
+        batch_q = F.select_item(self.network(batch_x), batch_action)
+        loss = F.mean_squared_error(batch_q, batch_y)
 
-        prediction_train = model(image_train)
-
-    # Calculate the loss with softmax_cross_entropy
-    loss = F.softmax_cross_entropy(prediction_train, target_train)
-
-    # Calculate the gradients in the network
-    model.cleargrads()
-    loss.backward()
-
-    # Update all the trainable paremters
-    optimizer.update()
+        self.network.cleargrads()
+        loss.backward()
+        self.optimizer.update()
 
     def _update_target_network(self):
         self.target_network.copyparams(self.network)

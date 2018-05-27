@@ -2,7 +2,8 @@ import numpy as np
 
 
 class VanillaReplay:
-    def __init__(self, limit=1_000_000):
+    def __init__(self, limit=1_000_000 // 4):
+        # limit: divided by action repeat
         self.limit = limit
         self.experiences = []
 
