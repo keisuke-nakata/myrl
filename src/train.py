@@ -1,9 +1,14 @@
 import sys
+import logging
+import logging.config
 
 import gym
 import toml
 
 from myrl import algorithms
+
+
+logger = logging.getLogger(__name__)
 
 
 def train(config, env_id):
@@ -15,6 +20,13 @@ def train(config, env_id):
 
 
 if __name__ == '__main__':
+    logging_config = toml.load('logging.toml')
+    logging_config['handlers']['file']['filename'] = logging_config['handlers']['file']['filename'].format(result_dir='hoge')
+    logging.config.dictConfig(logging_config)
+
     config = toml.load(sys.argv[1])
     env_id = sys.argv[2]  # Pong-v4
+
+    logger.info('training start')
     train(config, env_id)
+    logger.info('training end')

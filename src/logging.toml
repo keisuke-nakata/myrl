@@ -1,0 +1,20 @@
+version = 1
+disable_existing_loggers = false
+
+[formatters]
+[formatters.simple]
+format = "%(levelname)-8s - %(asctime)s - [%(name)s %(funcName)s %(lineno)d] %(message)s"
+
+[handlers]
+[handlers.console]
+class = "logging.StreamHandler"
+formatter = "simple"
+
+[handlers.file]
+class = "logging.FileHandler"
+formatter = "simple"
+filename = "{result_dir}/log.txt"
+
+[root]
+level = "DEBUG"
+handlers = ["console", "file"]

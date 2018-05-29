@@ -144,7 +144,7 @@ class QActor(BaseActor):
 
         # store last_state
         if done:
-            print('episode {}, reward {}, step {}, total_step'.format(self.total_episodes, reward, self.current_episode_steps, self.total_steps))
+            print('episode {}, reward {}, step {}, total_step {}'.format(self.total_episodes, reward, self.current_episode_steps, self.total_steps))
             self._last_state = self._reset()
         else:
             self._last_state = state
@@ -152,3 +152,5 @@ class QActor(BaseActor):
         # update counters
         self.current_episode_steps += current_step
         self.total_steps += current_step
+
+        print('episode {}, reward {}, step {}, total_step {}'.format(self.total_episodes, reward, self.current_episode_steps, self.total_steps))

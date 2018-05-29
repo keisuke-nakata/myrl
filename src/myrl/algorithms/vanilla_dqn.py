@@ -1,3 +1,5 @@
+import logging
+
 from chainer import optimizers
 
 from .agents import BaseAgent
@@ -9,8 +11,12 @@ from ..replays import VanillaReplay
 from ..preprocessors import AtariPreprocessor
 
 
+logger = logging.getLogger(__name__)
+
+
 class VanillaDQNAgent(BaseAgent):
     def build(self, env, config):
+        logger.info('im an agent')
         self.env = env
         self.config = config
 
