@@ -1,5 +1,5 @@
 # n_warmup_steps = 50000
-n_warmup_steps = 100
+n_warmup_steps = 1000
 
 n_total_steps = 50000000
 

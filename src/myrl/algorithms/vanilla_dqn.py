@@ -41,6 +41,7 @@ class VanillaDQNAgent(BaseAgent):
         self.actor.warmup(self.config['n_warmup_steps'])
 
         while total_steps < self.config['n_total_steps']:
+            # print('episode {}, step {}'.format(total_episodes, total_steps))
             self.actor.act()
             experiences = self.replay.sample(size=self.config['learner']['batch_size'])
             self.learner.learn(experiences)

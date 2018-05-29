@@ -1,4 +1,4 @@
-import numpy as np
+import random
 
 
 class VanillaReplay:
@@ -12,4 +12,4 @@ class VanillaReplay:
         self.experiences = self.experiences[-self.limit:]
 
     def sample(self, size):
-        return np.random.choice(self.experiences, size=size, replace=False)
+        return random.choices(self.experiences, k=size)

@@ -1,3 +1,5 @@
+import numpy as np
+
 import chainer
 import chainer.functions as F
 from chainer.serializers import save_hdf5
@@ -48,11 +50,11 @@ class FittedQLearner(BaseLearner):
             self._update_target_network()
         states, actions, rewards, next_states, dones = zip(*experiences)
 
-        batch_x = to_device(self.target_network._device_id, states)
-        batch_action = to_device(self.target_network._device_id, actions)
-        batch_next_x = to_device(self.target_network._device_id, next_states)
-        batch_reward = to_device(self.target_network._device_id, rewards)
-        batch_done = to_device(self.target_network._device_id, dones)
+        batch_x = to_device(self.target_network._device_id, np.asarray(states, dtype=np.float32))
+        batch_action = to_device(self.target_network._device_id, np.asarray(actions, dtype=np.int32))
+        batch_next_x = to_device(self.target_network._device_id, np.asarray(next_states, dtype=np.float32))
+        batch_reward = to_device(self.target_network._device_id, np.asarray(rewards, dtype=np.float32))
+        batch_done = to_device(self.target_network._device_id, np.asarray(dones, dtype=np.float32))
         with chainer.no_backprop_mode():
             batch_target_q = self.target_network(batch_next_x)
             batch_y = batch_reward + self.gamma * batch_done * F.max(batch_target_q, axis=1)

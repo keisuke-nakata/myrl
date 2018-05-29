@@ -114,9 +114,10 @@ class BaseActor:
     @property
     def state(self):
         if self.n_stack_frames == 0:
-            return self.obs_buf[-1]
+            state = self.obs_buf[-1]
         else:
-            return np.concatenate(self.obs_buf, axis=-1)
+            state = np.concatenate(self.obs_buf, axis=-1)
+        return np.transpose(state, (2, 0, 1))  # chainer is channel first
 
 
 class QActor(BaseActor):
@@ -128,7 +129,7 @@ class QActor(BaseActor):
         one_batch_state = np.asarray([self._last_state], dtype=np.float32)  # [state]: add (dummy) batch dim
         one_batch_state = to_device(self.network._device_id, one_batch_state)
         with chainer.no_backprop_mode():
-            q_values = to_device(CPU_ID, self.network(one_batch_state)).array[0]
+            q_values = to_device(CPU_ID, self.network(one_batch_state).array)[0]
         action = self.policy(q_values, self.total_steps)
 
         # interact with env
@@ -143,7 +144,7 @@ class QActor(BaseActor):
 
         # store last_state
         if done:
-            print('episode {}, reward {}'.format(self.total_episodes, reward))
+            print('episode {}, reward {}, step {}, total_step'.format(self.total_episodes, reward, self.current_episode_steps, self.total_steps))
             self._last_state = self._reset()
         else:
             self._last_state = state
