@@ -9,11 +9,13 @@ format = "%(levelname)-8s - %(asctime)s - [%(name)s %(funcName)s %(lineno)d] %(m
 [handlers.console]
 class = "logging.StreamHandler"
 formatter = "simple"
+level = "INFO"
 
 [handlers.file]
 class = "logging.FileHandler"
 formatter = "simple"
 filename = "{result_dir}/log.txt"
+level = "DEBUG"
 
 [root]
 level = "DEBUG"

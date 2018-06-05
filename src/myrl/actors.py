@@ -1,4 +1,6 @@
+import logging
 import random
+import warnings
 
 import numpy as np
 import chainer
@@ -7,12 +9,17 @@ from chainer.dataset.convert import to_device
 
 from .preprocessors import DoNothingPreprocessor
 
+logger = logging.getLogger(__name__)
 
 CPU_ID = -1
 
 
 class BaseActor:
     def __init__(self, env, network, policy, global_replay, n_action_repeat=1, obs_preprocessor=None, n_random_actions_at_reset=(0, 0), n_stack_frames=1):
+        if n_action_repeat != n_stack_frames:
+            msg = 'Giving different n_action_repeat and n_stack_frames (given {} and {}) cause unexpected behavior.'.format(n_action_repeat, n_stack_frames)
+            warnings.warn(msg)
+            logger.warn(msg)
         self.env = env
         self.network = network
         self.policy = policy
@@ -25,12 +32,13 @@ class BaseActor:
         self.n_random_actions_at_reset = n_random_actions_at_reset  # both inclusive
         self.n_stack_frames = n_stack_frames
 
-        self.obs_buf = []
+        self.obs_buf = []  # local に observation を持っておくバッファ (state は obs 4つが必要なので内部的に過去の obs を持っておく必要がある)
         self._last_observation = None
         # self.local_buffer = VanillaReplay()
         self.total_steps = 0
         self.total_episodes = 0
         self.current_episode_steps = 0
+        self.current_episode_reward = 0.0
 
     def load_parameters(self, parameters):
         raise NotImplementedError
@@ -54,7 +62,7 @@ class BaseActor:
     #     raise NotImplementedError
 
     def warmup(self, n_steps):
-        print('warning up...')
+        logger.info('warming up {} steps...'.format(n_steps))
         if not hasattr(self, '_last_state'):  # first interaction
             self._last_state = self._reset()
         step = 0
@@ -65,26 +73,41 @@ class BaseActor:
             self.global_replay.push((self._last_state, np.int32(action), np.sign(reward), state, done))
             if done:
                 self._last_state = self._reset()
+                logger.info('episode finished with reward {}')
             else:
                 self._last_state = state
             step += current_step
-        # restore env
+        # restore counter and env
+        self.total_steps = 0
         self.total_episodes = 0
+        self.current_episode_steps = 0
+        self.current_episode_reward = 0.0
         self._last_state = self._reset()
+        logger.info('warming up {} steps... done ({} steps).'.format(n_steps, step))
 
     def _repeat_action(self, action):
         """与えられた行動を n 回繰り返す。
         ただし途中で done になった場合はそれ以上環境と通信せず、n に足りないぶんを最後の状態をコピーして観測バッファに詰める
         """
+        logger.debug('repeating {} times: action {} times'.format(self.n_action_repeat, action))
         reward = 0
         for step in range(1, self.n_action_repeat + 1):
             observation, current_reward, done, info = self.env.step(action)
+            logger.debug('action: {}, reward: {}, done: {}'.format(action, current_reward, done))
             reward += current_reward
             self._push_obs_buf(observation)
             if done:
                 for _ in range(self.n_action_repeat - step):
                     self._push_obs_buf(observation.copy())
+                    logger.debug('The env is done. Pad the last observation as dummy to fill the buffer.')
                 break
+        # update counters
+        self.total_steps += step
+        self.current_episode_steps += step
+        self.current_episode_reward += reward
+
+        logger.debug('step {} of episode {} (action {}, reward {}, done {}) total_steps {}'.format(
+            self.current_episode_steps, self.total_episodes, action, reward, done, self.total_steps))
         return reward, done, step
 
     def _reset(self):
@@ -92,17 +115,29 @@ class BaseActor:
         `observation` is the raw/preprocessed observation from the env.
         `state` is the input for learners/replays, which may be stacked observations.
         """
-        # observation = self.obs_preprocessor(self.env.reset())
         observation = self.env.reset()
+        logger.debug('env reset')
+
+        # counters
+        self.total_episodes += 1
+        self.current_episode_steps = 0
+        self.current_episode_reward = 0.0
+
         for _ in range(self.n_stack_frames):
             self._push_obs_buf(observation.copy())  # fill obs_buf with the first frame
 
-        for _ in range(random.randint(*self.n_random_actions_at_reset)):
-            # self._push_obs_buf(self.obs_preprocessor(self.env.step(self.env.action_space.sample())[0]))
-            self._push_obs_buf(self.env.step(self.env.action_space.sample())[0])
+        n_random_actions = random.randint(*self.n_random_actions_at_reset)
+        logger.debug('take random {} action at reset'.format(n_random_actions))
+        for _ in range(n_random_actions):
+            action = self.env.action_space.sample()
+            observation, reward, done, info = self.env.step(action)
+            logger.debug('action: {}, reward: {}, done: {}'.format(action, reward, done))
+            self.total_steps += 1
+            self.current_episode_steps += 1
+            self.current_episode_reward += reward
+            self._push_obs_buf(observation)
 
-        self.total_episodes += 1
-        self.current_episode_steps = 0
+        logger.info('begin episode {}'.format(self.total_episodes))
         return self.state
 
     def _push_obs_buf(self, observation):
@@ -144,13 +179,8 @@ class QActor(BaseActor):
 
         # store last_state
         if done:
-            print('episode {}, reward {}, step {}, total_step {}'.format(self.total_episodes, reward, self.current_episode_steps, self.total_steps))
+            logger.info('finished episode {} with reward {}, step {} (total_steps {})'.format(
+                self.total_episodes, self.current_episode_reward, self.current_episode_steps, self.total_steps))
             self._last_state = self._reset()
         else:
             self._last_state = state
-
-        # update counters
-        self.current_episode_steps += current_step
-        self.total_steps += current_step
-
-        print('episode {}, reward {}, step {}, total_step {}'.format(self.total_episodes, reward, self.current_episode_steps, self.total_steps))

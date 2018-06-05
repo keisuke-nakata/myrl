@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 class VanillaDQNAgent(BaseAgent):
     def build(self, env, config):
-        logger.info('im an agent')
         self.env = env
         self.config = config
 
@@ -25,19 +24,23 @@ class VanillaDQNAgent(BaseAgent):
         self.network = VanillaCNN(self.n_actions)  # will be shared among actor and learner
         self.policy = EpsilonGreedy(action_space=env.action_space, **self.config['policy']['params'])
 
-        self.replay = VanillaReplay(limit=self.config['replay']['limit'] // 4)  # divided by action repeat
+        n_action_repeat = self.config['actor']['n_action_repeat']
+
+        self.replay = VanillaReplay(limit=self.config['replay']['limit'] // n_action_repeat)
         self.obs_preprocessor = AtariPreprocessor()
         self.actor = QActor(
             env=env,
             network=self.network,
             policy=self.policy,
             global_replay=self.replay,
-            n_action_repeat=4,
+            n_action_repeat=n_action_repeat,
             obs_preprocessor=self.obs_preprocessor,
-            n_random_actions_at_reset=(0, 30),
-            n_stack_frames=4)
+            n_random_actions_at_reset=tuple(self.config['actor']['n_random_actions_at_reset']),
+            n_stack_frames=self.config['n_stack_frames'])
         optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
         self.learner = FittedQLearner(network=self.network, optimizer=optimizer, gamma=self.config['learner']['gamma'])
+
+        logger.debug('build a VanillaDQNAgent, {}'.format(env))
 
     def train(self):
         """同期更新なので単なるループでOK"""
@@ -47,7 +50,7 @@ class VanillaDQNAgent(BaseAgent):
         self.actor.warmup(self.config['n_warmup_steps'])
 
         while total_steps < self.config['n_total_steps']:
-            # print('episode {}, step {}'.format(total_episodes, total_steps))
+            logger.debug('episode {}, step {}'.format(total_episodes, total_steps))
             self.actor.act()
             experiences = self.replay.sample(size=self.config['learner']['batch_size'])
             self.learner.learn(experiences)
