@@ -1,9 +1,14 @@
+import logging
+
 import numpy as np
 
 import chainer
 import chainer.functions as F
 from chainer.serializers import save_hdf5
 from chainer.dataset.convert import to_device
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseLearner:
@@ -14,12 +19,12 @@ class BaseLearner:
 
         self.optimizer.setup(self.network)
 
-        self.n_steps = 0
+        self.n_updates = 0
 
     def learn(self, experiences):
         batch = self._experiences2batch(experiences)
         self._learn(batch)
-        self.n_steps += 1
+        self.n_updates += 1
 
     def dump_parameters(self, path):
         save_hdf5(filename=path, obj=self.network)
@@ -46,8 +51,9 @@ class FittedQLearner(BaseLearner):
         # network と target_network は同じデバイスにいないと非常にめんどくさいかも (データのコピーが行ったり来たりするので)
 
     def _experiences2batch(self, experiences):
-        if self.n_steps % self.target_network_update_freq == 0:
+        if self.n_updates % self.target_network_update_freq == 0:
             self._update_target_network()
+            logger.info('update target network at learner updates {}'.format(self.n_updates))
         states, actions, rewards, next_states, dones = zip(*experiences)
 
         batch_x = to_device(self.target_network._device_id, np.asarray(states, dtype=np.float32))

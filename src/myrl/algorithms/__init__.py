@@ -1,1 +1,1 @@
-from . import agents, vanilla_dqn
+from . import vanilla_dqn

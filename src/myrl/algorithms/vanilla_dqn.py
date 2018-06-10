@@ -2,7 +2,6 @@ import logging
 
 from chainer import optimizers
 
-from .agents import BaseAgent
 from ..networks import VanillaCNN
 from ..actors import QActor
 from ..learners import FittedQLearner
@@ -14,10 +13,10 @@ from ..preprocessors import AtariPreprocessor
 logger = logging.getLogger(__name__)
 
 
-class VanillaDQNAgent(BaseAgent):
-    def build(self, env, config):
-        self.env = env
+class VanillaDQNAgent:
+    def build(self, config, env):
         self.config = config
+        self.env = env
 
         self.n_actions = env.action_space.n
 
@@ -38,7 +37,12 @@ class VanillaDQNAgent(BaseAgent):
             n_random_actions_at_reset=tuple(self.config['actor']['n_random_actions_at_reset']),
             n_stack_frames=self.config['n_stack_frames'])
         optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
-        self.learner = FittedQLearner(network=self.network, optimizer=optimizer, gamma=self.config['learner']['gamma'])
+        self.learner = FittedQLearner(
+            network=self.network,
+            optimizer=optimizer,
+            gamma=self.config['learner']['gamma'],
+            target_network_update_freq=self.config['learner']['target_network_update_freq'])
+        # self.renderer =
 
         logger.debug('build a VanillaDQNAgent, {}'.format(env))
 

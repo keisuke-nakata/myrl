@@ -28,6 +28,7 @@ eps = 0.01
 [learner]
 gamma = 0.99
 batch_size = 32
+target_network_update_freq = 10000
 
 [actor]
 n_action_repeat = 4

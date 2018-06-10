@@ -1,1 +1,1 @@
-from . import actors, learners, networks, policies, preprocessors, replays, algorithms
+from . import actors, learners, networks, policies, preprocessors, replays, algorithms, utils

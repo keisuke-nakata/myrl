@@ -8,6 +8,7 @@ from chainer.dataset.convert import to_device
 # from ..replays import VanillaReplay
 
 from .preprocessors import DoNothingPreprocessor
+from .utils import Timer
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,9 @@ class BaseActor:
         self.current_episode_steps = 0
         self.current_episode_reward = 0.0
 
+        self.timer = Timer()
+        self.timer.start()
+
     def load_parameters(self, parameters):
         raise NotImplementedError
 
@@ -66,14 +70,16 @@ class BaseActor:
         if not hasattr(self, '_last_state'):  # first interaction
             self._last_state = self._reset()
         step = 0
+        self.timer.lap()
         while step < n_steps:
             action = self.env.action_space.sample()
             reward, done, current_step = self._repeat_action(action)
             state = self.state
             self.global_replay.push((self._last_state, np.int32(action), np.sign(reward), state, done))
             if done:
+                self.timer.lap()
+                logger.info('episode finished with reward {} in {} (total_time {})'.format(self.current_episode_reward, self.timer.laptime_str, self.timer.elapsed_str))
                 self._last_state = self._reset()
-                logger.info('episode finished with reward {}')
             else:
                 self._last_state = state
             step += current_step
@@ -137,7 +143,7 @@ class BaseActor:
             self.current_episode_reward += reward
             self._push_obs_buf(observation)
 
-        logger.info('begin episode {}'.format(self.total_episodes))
+        logger.debug('begin episode {}'.format(self.total_episodes))
         return self.state
 
     def _push_obs_buf(self, observation):
@@ -179,8 +185,10 @@ class QActor(BaseActor):
 
         # store last_state
         if done:
-            logger.info('finished episode {} with reward {}, step {} (total_steps {})'.format(
-                self.total_episodes, self.current_episode_reward, self.current_episode_steps, self.total_steps))
+            self.timer.lap()
+            logger.info('finished episode {} with reward {}, step {} in {} (total_steps {}, epsilon {}, total_time {})'.format(
+                self.total_episodes, self.current_episode_reward, self.current_episode_steps, self.timer.laptime_str,
+                self.total_steps, self.policy.get_epsilon(self.total_steps), self.timer.elapsed_str))
             self._last_state = self._reset()
         else:
             self._last_state = state
