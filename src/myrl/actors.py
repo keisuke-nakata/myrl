@@ -1,6 +1,7 @@
 import logging
 import random
 import warnings
+import os
 
 import numpy as np
 import chainer
@@ -16,7 +17,11 @@ CPU_ID = -1
 
 
 class BaseActor:
-    def __init__(self, env, network, policy, global_replay, n_action_repeat=1, obs_preprocessor=None, n_random_actions_at_reset=(0, 0), n_stack_frames=1):
+    def __init__(
+            self,
+            env, network, policy, global_replay,
+            n_action_repeat=1, obs_preprocessor=None, n_random_actions_at_reset=(0, 0), n_stack_frames=1,
+            render_episode_freq=10, render_dir=None):
         if n_action_repeat != n_stack_frames:
             msg = 'Giving different n_action_repeat and n_stack_frames (given {} and {}) cause unexpected behavior.'.format(n_action_repeat, n_stack_frames)
             warnings.warn(msg)
@@ -32,14 +37,14 @@ class BaseActor:
             self.obs_preprocessor = obs_preprocessor
         self.n_random_actions_at_reset = n_random_actions_at_reset  # both inclusive
         self.n_stack_frames = n_stack_frames
+        self.render_episode_freq = render_episode_freq
+        self.render_dir = render_dir
 
-        self.obs_buf = []  # local に observation を持っておくバッファ (state は obs 4つが必要なので内部的に過去の obs を持っておく必要がある)
-        self._last_observation = None
         # self.local_buffer = VanillaReplay()
         self.total_steps = 0
         self.total_episodes = 0
-        self.current_episode_steps = 0
-        self.current_episode_reward = 0.0
+        self.require_reset = True
+        self.rendering_mode = False
 
         self.timer = Timer()
         self.timer.start()
@@ -67,28 +72,23 @@ class BaseActor:
 
     def warmup(self, n_steps):
         logger.info('warming up {} steps...'.format(n_steps))
-        if not hasattr(self, '_last_state'):  # first interaction
-            self._last_state = self._reset()
+        self._reset()
+
         step = 0
         self.timer.lap()
         while step < n_steps:
             action = self.env.action_space.sample()
             reward, done, current_step = self._repeat_action(action)
-            state = self.state
-            self.global_replay.push((self._last_state, np.int32(action), np.sign(reward), state, done))
+            self.global_replay.push((self.previous_state, np.int32(action), np.sign(reward), self.state, done))
             if done:
                 self.timer.lap()
-                logger.info('episode finished with reward {} in {} (total_time {})'.format(self.current_episode_reward, self.timer.laptime_str, self.timer.elapsed_str))
-                self._last_state = self._reset()
-            else:
-                self._last_state = state
+                logger.info('episode finished with reward {} in {} (total_time {})'.format(self.episode_reward, self.timer.laptime_str, self.timer.elapsed_str))
+                self._reset()
             step += current_step
         # restore counter and env
         self.total_steps = 0
         self.total_episodes = 0
-        self.current_episode_steps = 0
-        self.current_episode_reward = 0.0
-        self._last_state = self._reset()
+        self.require_reset = True
         logger.info('warming up {} steps... done ({} steps).'.format(n_steps, step))
 
     def _repeat_action(self, action):
@@ -101,19 +101,26 @@ class BaseActor:
             observation, current_reward, done, info = self.env.step(action)
             logger.debug('action: {}, reward: {}, done: {}'.format(action, current_reward, done))
             reward += current_reward
-            self._push_obs_buf(observation)
+            self._push_episode_obses(observation)
+            self.episode_actions.append(action)
+            if self.rendering_mode:
+                img = self.env.render(mode='rgb_array')
+            else:
+                img = None
+            self.episode_imgs.append(img)
             if done:
                 for _ in range(self.n_action_repeat - step):
-                    self._push_obs_buf(observation.copy())
-                    logger.debug('The env is done. Pad the last observation as dummy to fill the buffer.')
+                    self._push_episode_obses(observation.copy())
+                    logger.debug('The env is done. Pad the last observation as dummies to fill the buffer.')
+                self.require_reset = True
                 break
         # update counters
         self.total_steps += step
-        self.current_episode_steps += step
-        self.current_episode_reward += reward
+        self.episode_steps += step
+        self.episode_reward += reward
 
         logger.debug('step {} of episode {} (action {}, reward {}, done {}) total_steps {}'.format(
-            self.current_episode_steps, self.total_episodes, action, reward, done, self.total_steps))
+            self.episode_steps, self.total_episodes, action, reward, done, self.total_steps))
         return reward, done, step
 
     def _reset(self):
@@ -122,15 +129,29 @@ class BaseActor:
         `state` is the input for learners/replays, which may be stacked observations.
         """
         observation = self.env.reset()
-        logger.debug('env reset')
+        self.require_reset = False
+        if self.rendering_mode:
+            msg = 'env reset with rendering mode'
+        else:
+            msg = 'env reset without rendering mode'
+        logger.debug(msg)
 
         # counters
         self.total_episodes += 1
-        self.current_episode_steps = 0
-        self.current_episode_reward = 0.0
+        self.episode_steps = 0
+        self.episode_reward = 0.0
+        self.episode_actions = []
+        self.episode_imgs = []
+        self.episode_obses = []
 
         for _ in range(self.n_stack_frames):
-            self._push_obs_buf(observation.copy())  # fill obs_buf with the first frame
+            self._push_episode_obses(observation.copy())  # fill episode_obses with the first frame
+
+        if self.rendering_mode:
+            img = self.env.render(mode='rgb_array')
+        else:
+            img = None
+        self.episode_imgs.append(img)
 
         n_random_actions = random.randint(*self.n_random_actions_at_reset)
         logger.debug('take random {} action at reset'.format(n_random_actions))
@@ -139,35 +160,60 @@ class BaseActor:
             observation, reward, done, info = self.env.step(action)
             logger.debug('action: {}, reward: {}, done: {}'.format(action, reward, done))
             self.total_steps += 1
-            self.current_episode_steps += 1
-            self.current_episode_reward += reward
-            self._push_obs_buf(observation)
+            self.episode_steps += 1
+            self.episode_reward += reward
+            self.episode_actions.append(action)
+            self._push_episode_obses(observation)
+            if self.rendering_mode:
+                img = self.env.render(mode='rgb_array')
+            else:
+                img = None
+            self.episode_imgs.append(img)
 
         logger.debug('begin episode {}'.format(self.total_episodes))
-        return self.state
 
-    def _push_obs_buf(self, observation):
-        processed_observation = self.obs_preprocessor(observation, self._last_observation)
-        self.obs_buf.append(processed_observation)
-        self._last_observation = observation
-        self.obs_buf = self.obs_buf[-self.n_stack_frames:]
+    def _push_episode_obses(self, observation):
+        if not hasattr(self, 'last_observation'):
+            self.last_observation = None
+        processed_observation = self.obs_preprocessor(observation, self.last_observation)
+        self.last_observation = observation
+        self.episode_obses.append(processed_observation)
 
     @property
     def state(self):
         if self.n_stack_frames == 0:
-            state = self.obs_buf[-1]
+            state = self.episode_obses[-1]
         else:
-            state = np.concatenate(self.obs_buf, axis=-1)
+            state = np.concatenate(self.episode_obses[-self.n_stack_frames:], axis=-1)
         return np.transpose(state, (2, 0, 1))  # chainer is channel first
+
+    @property
+    def previous_state(self):
+        if self.n_stack_frames == 0:
+            previous_state = self.episode_obses[-2]
+        else:
+            previous_state = np.concatenate(self.episode_obses[-self.n_stack_frames * 2:-self.n_stack_frames], axis=-1)
+        return np.transpose(previous_state, (2, 0, 1))  # chainer is channel first
+
+    def dump_episode(self, render_dir):
+        os.makedirs(render_dir, exist_ok=True)
+        for step, img in enumerate(self.episode_imgs):
+            with open(os.path.join(render_dir, str(step) + '.txt'), 'w') as f:
+                print(step, file=f)
+        logger.info('dump an episode at {}'.format(render_dir))
 
 
 class QActor(BaseActor):
     def act(self):
-        if not hasattr(self, '_last_state'):  # first interaction
-            self._last_state = self._reset()
+        if self.require_reset:
+            if self.render_episode_freq > 0:
+                self.rendering_mode = self.total_episodes % self.render_episode_freq == 0
+            else:
+                self.rendering_mode = False
+            self._reset()
 
         # get action
-        one_batch_state = np.asarray([self._last_state], dtype=np.float32)  # [state]: add (dummy) batch dim
+        one_batch_state = np.asarray([self.state], dtype=np.float32)  # [state]: add (dummy) batch dim
         one_batch_state = to_device(self.network._device_id, one_batch_state)
         with chainer.no_backprop_mode():
             q_values = to_device(CPU_ID, self.network(one_batch_state).array)[0]
@@ -177,18 +223,16 @@ class QActor(BaseActor):
         reward, done, current_step = self._repeat_action(action)
 
         # push experience to replay buffer
-        state = self.state
-        # self.local_buffer.push((self._last_state, action, reward, self.current_episode_steps))
+        # self.local_buffer.push((self._last_state, action, reward, self.episode_steps))
         # if len(self.local_buffer) >= local_buffer_size:  # TODO
         #     self.local_buffer.forward_to_replay()  # TODO
-        self.global_replay.push((self._last_state, np.int32(action), np.sign(reward), state, done))
+        self.global_replay.push((self.previous_state, np.int32(action), np.sign(reward), self.state, done))
 
-        # store last_state
         if done:
             self.timer.lap()
             logger.info('finished episode {} with reward {}, step {} in {} (total_steps {}, epsilon {}, total_time {})'.format(
-                self.total_episodes, self.current_episode_reward, self.current_episode_steps, self.timer.laptime_str,
+                self.total_episodes, self.episode_reward, self.episode_steps, self.timer.laptime_str,
                 self.total_steps, self.policy.get_epsilon(self.total_steps), self.timer.elapsed_str))
-            self._last_state = self._reset()
-        else:
-            self._last_state = state
+            if self.rendering_mode:
+                render_dir = os.path.join(self.render_dir, 'episode{}'.format(self.total_episodes))
+                self.dump_episode(render_dir)

@@ -35,7 +35,9 @@ class VanillaDQNAgent:
             n_action_repeat=n_action_repeat,
             obs_preprocessor=self.obs_preprocessor,
             n_random_actions_at_reset=tuple(self.config['actor']['n_random_actions_at_reset']),
-            n_stack_frames=self.config['n_stack_frames'])
+            n_stack_frames=self.config['n_stack_frames'],
+            render_episode_freq=self.config['visualizer']['render_episode_freq'],
+            render_dir=self.config['visualizer']['render_dir'])
         optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
         self.learner = FittedQLearner(
             network=self.network,
