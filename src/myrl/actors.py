@@ -191,9 +191,9 @@ class BaseActor:
         with open(history_path, mode=mode) as f:
             writer = csv.writer(f)
             if mode == 'w':
-                header = ['total_episodes', 'total_steps', 'episode_steps', 'episode_reward', 'episode_seconds']
+                header = ['total_episodes', 'total_steps', 'episode_steps', 'episode_reward', 'episode_seconds', 'episode_fps']
                 writer.writerow(header)
-            writer.writerow([self.total_episodes, self.total_steps, self.episode_steps, self.episode_reward, episode_seconds])
+            writer.writerow([self.total_episodes, self.total_steps, self.episode_steps, self.episode_reward, episode_seconds, self.episode_steps / episode_seconds])
 
     def dump_step_history(self, path):
         assert self.episode_steps == len(self.episode_actions) == len(self.episode_actions_random)
@@ -228,7 +228,6 @@ class QActor(BaseActor):
 
         if done:
             self.timer.lap()
-            episode_fps = self.episode_steps / self.timer.laptime
             self.dump_episode_history(
                 self.timer.laptime,
                 os.path.join(self.result_dir, 'history.csv'),
