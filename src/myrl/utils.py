@@ -26,11 +26,11 @@ class Timer:
         min_ = int((seconds // 60) % 60)
         hour = int(seconds // 3600)
 
-        ret = '{:.1f}sec'.format(sec)
+        ret = f'{sec:.1f}sec'
         if hour > 0:
-            ret = '{}hour {}min '.format(hour, min_) + ret
+            ret = f'{hour}hour {min_}min ' + ret
         elif min_ > 0:
-            ret = '{}min '.format(min_) + ret
+            ret = f'{min_}min ' + ret
 
         return ret
 

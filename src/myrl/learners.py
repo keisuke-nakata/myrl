@@ -52,8 +52,8 @@ class FittedQLearner(BaseLearner):
 
     def _experiences2batch(self, experiences):
         if self.n_updates % self.target_network_update_freq == 0:
-            self._update_target_network()
-            logger.info('update target network at learner updates {}'.format(self.n_updates))
+            self._sync_target_network()
+            logger.info(f'sync target network at learner updates {self.n_updates}')
         states, actions, rewards, next_states, dones = zip(*experiences)
 
         batch_x = to_device(self.target_network._device_id, np.asarray(states, dtype=np.float32))
@@ -76,5 +76,5 @@ class FittedQLearner(BaseLearner):
         loss.backward()
         self.optimizer.update()
 
-    def _update_target_network(self):
+    def _sync_target_network(self):
         self.target_network.copyparams(self.network)

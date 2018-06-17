@@ -15,7 +15,7 @@ level = "INFO"
 class = "logging.FileHandler"
 formatter = "simple"
 filename = "{result_dir}/log.txt"
-level = "DEBUG"
+level = "INFO"
 
 [root]
 level = "DEBUG"

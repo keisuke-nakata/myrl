@@ -2,8 +2,12 @@ import logging
 import random
 import warnings
 import os
+import csv
+from collections import OrderedDict
 
 import numpy as np
+import imageio
+import pandas as pd
 import chainer
 from chainer.dataset.convert import to_device
 # from ..replays import VanillaReplay
@@ -21,9 +25,9 @@ class BaseActor:
             self,
             env, network, policy, global_replay,
             n_action_repeat=1, obs_preprocessor=None, n_random_actions_at_reset=(0, 0), n_stack_frames=1,
-            render_episode_freq=10, render_dir=None):
+            result_dir='./', render_episode_freq=10):
         if n_action_repeat != n_stack_frames:
-            msg = 'Giving different n_action_repeat and n_stack_frames (given {} and {}) cause unexpected behavior.'.format(n_action_repeat, n_stack_frames)
+            msg = f'Giving different n_action_repeat and n_stack_frames (given {n_action_repeat} and {n_stack_frames}) cause unexpected behavior.'
             warnings.warn(msg)
             logger.warn(msg)
         self.env = env
@@ -37,8 +41,8 @@ class BaseActor:
             self.obs_preprocessor = obs_preprocessor
         self.n_random_actions_at_reset = n_random_actions_at_reset  # both inclusive
         self.n_stack_frames = n_stack_frames
+        self.result_dir = result_dir
         self.render_episode_freq = render_episode_freq
-        self.render_dir = render_dir
 
         # self.local_buffer = VanillaReplay()
         self.total_steps = 0
@@ -52,57 +56,44 @@ class BaseActor:
     def load_parameters(self, parameters):
         raise NotImplementedError
 
-    # def act(self, local_buffer_size=1, n_steps=None):
-    #     """
-    #     Parameters
-    #     ----------
-    #     local_buffer_size : int, optional
-    #         corresponds to "B" in the Ape-X paper (Algorithm 1)
-    #     n_steps : int, optional
-    #         corresponds to "T" in the Ape-X paper (Algorithm 1)
-    #
-    #     Returns
-    #     -------
-    #     steps : int
-    #         #steps (actions) the actor tried.
-    #     episodes : int
-    #         #episodes the actor tried. Un-terminated episodes will be included.
-    #     """
-    #     raise NotImplementedError
-
     def warmup(self, n_steps):
-        logger.info('warming up {} steps...'.format(n_steps))
+        logger.info(f'warming up {n_steps} steps...')
         self._reset()
 
         step = 0
         self.timer.lap()
         while step < n_steps:
             action = self.env.action_space.sample()
-            reward, done, current_step = self._repeat_action(action)
-            self.global_replay.push((self.previous_state, np.int32(action), np.sign(reward), self.state, done))
+            reward, done, current_step = self._repeat_action(action, is_random=True)
+            self.global_replay.push((self.previous_state, np.int32(action), reward, self.state, done))
             if done:
                 self.timer.lap()
-                logger.info('episode finished with reward {} in {} (total_time {})'.format(self.episode_reward, self.timer.laptime_str, self.timer.elapsed_str))
+                logger.info(
+                    f'finished warmup episode {self.total_episodes} '
+                    f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
+                    f'({self.episode_steps / self.timer.laptime:.2f} fps) '
+                    f'(total_steps {self.total_steps}, total_time {self.timer.elapsed_str})')
                 self._reset()
             step += current_step
         # restore counter and env
         self.total_steps = 0
         self.total_episodes = 0
         self.require_reset = True
-        logger.info('warming up {} steps... done ({} steps).'.format(n_steps, step))
+        logger.info(f'warming up {n_steps} steps... done ({step} steps).')
 
-    def _repeat_action(self, action):
+    def _repeat_action(self, action, is_random):
         """与えられた行動を n 回繰り返す。
         ただし途中で done になった場合はそれ以上環境と通信せず、n に足りないぶんを最後の状態をコピーして観測バッファに詰める
         """
-        logger.debug('repeating {} times: action {} times'.format(self.n_action_repeat, action))
+        logger.debug(f'repeating {self.n_action_repeat} times: action {action}')
         reward = 0
         for step in range(1, self.n_action_repeat + 1):
             observation, current_reward, done, info = self.env.step(action)
-            logger.debug('action: {}, reward: {}, done: {}'.format(action, current_reward, done))
+            logger.debug(f'action: {action}, reward: {current_reward}, done: {done}')
             reward += current_reward
             self._push_episode_obses(observation)
             self.episode_actions.append(action)
+            self.episode_actions_random.append(is_random)
             if self.rendering_mode:
                 img = self.env.render(mode='rgb_array')
             else:
@@ -119,8 +110,7 @@ class BaseActor:
         self.episode_steps += step
         self.episode_reward += reward
 
-        logger.debug('step {} of episode {} (action {}, reward {}, done {}) total_steps {}'.format(
-            self.episode_steps, self.total_episodes, action, reward, done, self.total_steps))
+        logger.debug(f'step {self.episode_steps} of episode {self.total_episodes} (action {action}, reward {reward}, done {done}) total_steps {self.total_steps}')
         return reward, done, step
 
     def _reset(self):
@@ -130,17 +120,14 @@ class BaseActor:
         """
         observation = self.env.reset()
         self.require_reset = False
-        if self.rendering_mode:
-            msg = 'env reset with rendering mode'
-        else:
-            msg = 'env reset without rendering mode'
-        logger.debug(msg)
+        logger.debug(f'env reset {"with" if self.rendering_mode else "without"} rendering mode')
 
         # counters
         self.total_episodes += 1
         self.episode_steps = 0
         self.episode_reward = 0.0
         self.episode_actions = []
+        self.episode_actions_random = []
         self.episode_imgs = []
         self.episode_obses = []
 
@@ -154,15 +141,16 @@ class BaseActor:
         self.episode_imgs.append(img)
 
         n_random_actions = random.randint(*self.n_random_actions_at_reset)
-        logger.debug('take random {} action at reset'.format(n_random_actions))
+        logger.debug(f'take random {n_random_actions} action at reset')
         for _ in range(n_random_actions):
             action = self.env.action_space.sample()
             observation, reward, done, info = self.env.step(action)
-            logger.debug('action: {}, reward: {}, done: {}'.format(action, reward, done))
+            logger.debug(f'action: {action}, reward: {reward}, done: {done}')
             self.total_steps += 1
             self.episode_steps += 1
             self.episode_reward += reward
             self.episode_actions.append(action)
+            self.episode_actions_random.append(True)
             self._push_episode_obses(observation)
             if self.rendering_mode:
                 img = self.env.render(mode='rgb_array')
@@ -170,7 +158,7 @@ class BaseActor:
                 img = None
             self.episode_imgs.append(img)
 
-        logger.debug('begin episode {}'.format(self.total_episodes))
+        logger.debug(f'begin episode {self.total_episodes}')
 
     def _push_episode_obses(self, observation):
         if not hasattr(self, 'last_observation'):
@@ -195,21 +183,31 @@ class BaseActor:
             previous_state = np.concatenate(self.episode_obses[-self.n_stack_frames * 2:-self.n_stack_frames], axis=-1)
         return np.transpose(previous_state, (2, 0, 1))  # chainer is channel first
 
-    def dump_episode(self, render_dir):
-        os.makedirs(render_dir, exist_ok=True)
-        for step, img in enumerate(self.episode_imgs):
-            with open(os.path.join(render_dir, str(step) + '.txt'), 'w') as f:
-                print(step, file=f)
-        logger.info('dump an episode at {}'.format(render_dir))
+    def render_episode_gif(self, path):
+        imageio.mimwrite(path, self.episode_imgs, fps=60)
+        logger.info('dump an episode at {}'.format(path))
+
+    def dump_episode_history(self, episode_seconds, history_path, mode):
+        with open(history_path, mode=mode) as f:
+            writer = csv.writer(f)
+            if mode == 'w':
+                header = ['total_episodes', 'total_steps', 'episode_steps', 'episode_reward', 'episode_seconds']
+                writer.writerow(header)
+            writer.writerow([self.total_episodes, self.total_steps, self.episode_steps, self.episode_reward, episode_seconds])
+
+    def dump_step_history(self, path):
+        assert self.episode_steps == len(self.episode_actions) == len(self.episode_actions_random)
+        d = OrderedDict([('episode_actions', self.episode_actions), ('episode_actions_random', self.episode_actions_random)])
+        pd.DataFrame(d).to_csv(path, index=False)
 
 
 class QActor(BaseActor):
     def act(self):
         if self.require_reset:
-            if self.render_episode_freq > 0:
-                self.rendering_mode = self.total_episodes % self.render_episode_freq == 0
-            else:
+            if self.render_episode_freq <= 0:
                 self.rendering_mode = False
+            else:
+                self.rendering_mode = self.total_episodes % self.render_episode_freq == 0
             self._reset()
 
         # get action
@@ -217,22 +215,31 @@ class QActor(BaseActor):
         one_batch_state = to_device(self.network._device_id, one_batch_state)
         with chainer.no_backprop_mode():
             q_values = to_device(CPU_ID, self.network(one_batch_state).array)[0]
-        action = self.policy(q_values, self.total_steps)
+        action, is_random = self.policy(q_values, self.total_steps)
 
         # interact with env
-        reward, done, current_step = self._repeat_action(action)
+        reward, done, current_step = self._repeat_action(action, is_random=is_random)
 
         # push experience to replay buffer
         # self.local_buffer.push((self._last_state, action, reward, self.episode_steps))
         # if len(self.local_buffer) >= local_buffer_size:  # TODO
         #     self.local_buffer.forward_to_replay()  # TODO
-        self.global_replay.push((self.previous_state, np.int32(action), np.sign(reward), self.state, done))
+        self.global_replay.push((self.previous_state, np.int32(action), reward, self.state, done))
 
         if done:
             self.timer.lap()
-            logger.info('finished episode {} with reward {}, step {} in {} (total_steps {}, epsilon {}, total_time {})'.format(
-                self.total_episodes, self.episode_reward, self.episode_steps, self.timer.laptime_str,
-                self.total_steps, self.policy.get_epsilon(self.total_steps), self.timer.elapsed_str))
+            episode_fps = self.episode_steps / self.timer.laptime
+            self.dump_episode_history(
+                self.timer.laptime,
+                os.path.join(self.result_dir, 'history.csv'),
+                mode='w' if self.total_episodes == 1 else 'a')
             if self.rendering_mode:
-                render_dir = os.path.join(self.render_dir, 'episode{}'.format(self.total_episodes))
-                self.dump_episode(render_dir)
+                episode_dir = os.path.join(self.result_dir, 'episode{}'.format(self.total_episodes))
+                os.makedirs(episode_dir, exist_ok=True)
+                self.dump_step_history(os.path.join(episode_dir, 'actions.csv'))
+                self.render_episode_gif(os.path.join(episode_dir, 'play.gif'))
+            logger.info(
+                f'finished episode {self.total_episodes} '
+                f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
+                f'({self.episode_steps / self.timer.laptime:.2f} fps) '
+                f'(epsilon {self.policy.get_epsilon(self.total_steps)}, total_steps {self.total_steps}, total_time {self.timer.elapsed_str})')

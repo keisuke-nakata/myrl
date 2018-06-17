@@ -2,13 +2,14 @@ import logging
 import logging.config
 import datetime as dt
 import os
+import traceback
 
 import click
 import gym
 import toml
 
 from myrl import algorithms
-from myrl.env_wrappers import SuddenDeathWrapper
+from myrl.env_wrappers import SuddenDeathWrapper, RewardClippingWrapper
 
 
 logger = logging.getLogger(__name__)
@@ -22,19 +23,23 @@ def train(config_path, env_id):
     CONFIG_PATH: config filepath, e.g.: configs/vanilla_dqn.toml\n
     ENV_ID: OpenAI Gym environment id, e.g.: Pong-v4
     """
-    result_dir = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+    config = toml.load(config_path)
+
+    now = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+    result_dir = config['result_dir'].format(now=now)
+    config['result_dir'] = result_dir
     os.makedirs(result_dir, exist_ok=True)
 
     logging_config = toml.load('logging.toml')
-    logging_config['handlers']['file']['filename'] = logging_config['handlers']['file']['filename'].format(result_dir=result_dir)
+    log_filename = logging_config['handlers']['file']['filename'].format(result_dir=result_dir)
+    os.makedirs(os.path.dirname(log_filename), exist_ok=True)
+    logging_config['handlers']['file']['filename'] = log_filename
     logging.config.dictConfig(logging_config)
 
     try:
-        config = toml.load(config_path)
-        config = set_result_dir(config, result_dir)
-
         _env = gym.make(env_id)  # Pong-v4
-        env = SuddenDeathWrapper(_env)
+        env = RewardClippingWrapper(_env)
+        env = SuddenDeathWrapper(env)
 
         agent = algorithms.vanilla_dqn.VanillaDQNAgent()
         agent.build(config, env)
@@ -43,15 +48,8 @@ def train(config_path, env_id):
         logger.info('training end')
     except:  # noqa
         logger.exception('train failed')
-
-
-def set_result_dir(nested_dict, result_dir):
-    for k, v in nested_dict.items():
-        if isinstance(v, str):
-            nested_dict[k] = v.format(result_dir=result_dir)
-        elif isinstance(v, dict):
-            nested_dict[k] = set_result_dir(v, result_dir)
-    return nested_dict
+        with open(os.path.join(result_dir, 'error.txt'), 'a') as f:
+            traceback.print_exc(file=f)
 
 
 if __name__ == '__main__':

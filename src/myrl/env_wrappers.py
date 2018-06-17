@@ -1,4 +1,10 @@
+import numpy as np
 import gym
+
+
+class RewardClippingWrapper(gym.RewardWrapper):
+    def reward(self, reward):
+        return np.sign(reward)
 
 
 class SuddenDeathWrapper(gym.Wrapper):

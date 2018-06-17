@@ -13,11 +13,12 @@ class EpsilonGreedy(Policy):
         self.final_exploration_step = final_exploration_step
 
     def __call__(self, q_values, step):
-        if np.random.uniform() < self.get_epsilon(step):
+        is_random = np.random.uniform() < self.get_epsilon(step)
+        if is_random:
             action = self.action_space.sample()
         else:
             action = np.argmax(q_values)
-        return action
+        return action, is_random
 
     def get_epsilon(self, step):
         if step > self.final_exploration_step:
