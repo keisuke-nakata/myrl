@@ -1,9 +1,10 @@
-# n_warmup_steps = 50000
-n_warmup_steps = 1000
+n_warmup_steps = 50000
+# n_warmup_steps = 1000
 n_total_steps = 50000000
+n_total_episodes = 600
 n_stack_frames = 4
 
-result_dir = "results/{now}"
+result_dir = "results/{env_id}/{now}"
 
 
 [replay]
@@ -37,4 +38,4 @@ n_action_repeat = 4
 n_random_actions_at_reset = [0, 30]  # will be converted to tuple
 
 [history]
-render_episode_freq = 100  # 0: no rendering
+render_episode_freq = 25  # 0: no rendering

@@ -24,9 +24,10 @@ def train(config_path, env_id):
     ENV_ID: OpenAI Gym environment id, e.g.: Pong-v4
     """
     config = toml.load(config_path)
+    _env = gym.make(env_id)  # Pong-v4
 
     now = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
-    result_dir = config['result_dir'].format(now=now)
+    result_dir = config['result_dir'].format(env_id=_env.spec.id, now=now)
     config['result_dir'] = result_dir
     os.makedirs(result_dir, exist_ok=True)
 
@@ -37,9 +38,8 @@ def train(config_path, env_id):
     logging.config.dictConfig(logging_config)
 
     try:
-        _env = gym.make(env_id)  # Pong-v4
         env = RewardClippingWrapper(_env)
-        env = SuddenDeathWrapper(env)
+        # env = SuddenDeathWrapper(env)
 
         agent = algorithms.vanilla_dqn.VanillaDQNAgent()
         agent.build(config, env)
