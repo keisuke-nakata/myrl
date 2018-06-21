@@ -10,6 +10,7 @@ format = "%(levelname)-8s - %(asctime)s - [%(name)s %(funcName)s %(lineno)d] %(m
 class = "logging.StreamHandler"
 formatter = "simple"
 level = "INFO"
+# level = "DEBUG"
 
 [handlers.file]
 class = "logging.FileHandler"

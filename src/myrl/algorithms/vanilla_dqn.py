@@ -1,11 +1,12 @@
 import logging
+import os
 
 from chainer import optimizers
 
 from ..networks import VanillaCNN
 from ..actors import QActor
 from ..learners import FittedQLearner
-from ..policies import EpsilonGreedy
+from ..policies import EpsilonGreedy, Greedy
 from ..replays import VanillaReplay
 from ..preprocessors import AtariPreprocessor
 
@@ -22,11 +23,25 @@ class VanillaDQNAgent:
 
         self.network = VanillaCNN(self.n_actions)  # will be shared among actor and learner
         self.policy = EpsilonGreedy(action_space=env.action_space, **self.config['policy']['params'])
+        self.greedy_policy = Greedy(action_space=env.action_space)
 
         n_action_repeat = self.config['actor']['n_action_repeat']
+        self.render_episode_freq = self.config['history']['render_episode_freq']
 
         self.replay = VanillaReplay(limit=self.config['replay']['limit'] // n_action_repeat)
+        self.dummy_replay = VanillaReplay(limit=self.config['replay']['limit'] // n_action_repeat)
         self.obs_preprocessor = AtariPreprocessor()
+        self.greedy_actor = QActor(
+            env=env,
+            network=self.network,
+            policy=self.greedy_policy,
+            global_replay=self.dummy_replay,
+            n_action_repeat=1,
+            obs_preprocessor=self.obs_preprocessor,
+            n_random_actions_at_reset=(0, 0),
+            n_stack_frames=self.config['n_stack_frames'],
+            result_dir=os.path.join(self.config['result_dir'], 'greedy'),
+            render_episode_freq=1)
         self.actor = QActor(
             env=env,
             network=self.network,
@@ -37,7 +52,7 @@ class VanillaDQNAgent:
             n_random_actions_at_reset=tuple(self.config['actor']['n_random_actions_at_reset']),
             n_stack_frames=self.config['n_stack_frames'],
             result_dir=self.config['result_dir'],
-            render_episode_freq=self.config['history']['render_episode_freq'],)
+            render_episode_freq=self.render_episode_freq)
         optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
         self.learner = FittedQLearner(
             network=self.network,
@@ -56,7 +71,7 @@ class VanillaDQNAgent:
 
         while total_steps < self.config['n_total_steps'] or total_episodes < self.config['n_total_episodes']:
             logger.debug(f'episode {total_episodes}, step {total_steps}')
-            self.actor.act()
+            q_values, action, is_random, reward, current_step, done = self.actor.act()
             experiences = self.replay.sample(size=self.config['learner']['batch_size'])
             self.learner.learn(experiences)
 
@@ -65,3 +80,13 @@ class VanillaDQNAgent:
 
             total_steps = self.actor.total_steps
             total_episodes = self.actor.total_episodes
+
+            # greedy actor's play
+            if done and total_episodes % self.render_episode_freq == 0:
+                logger.info('greedy actor is playing...')
+                self.greedy_actor.total_episodes = total_episodes - 1
+                while True:
+                    greedy_q_values, greedy_action, greedy_is_random, greedy_reward, greedy_current_step, greedy_done = self.greedy_actor.act()
+                    if greedy_done:  # greedy_actor will render the episode automatically
+                        break
+                logger.info('greedy actor is playing... done.')

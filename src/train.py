@@ -30,6 +30,8 @@ def train(config_path, env_id):
     result_dir = config['result_dir'].format(env_id=_env.spec.id, now=now)
     config['result_dir'] = result_dir
     os.makedirs(result_dir, exist_ok=True)
+    with open(os.path.join(result_dir, 'config.toml'), 'w') as f:
+        toml.dump(config, f)
 
     logging_config = toml.load('logging.toml')
     log_filename = logging_config['handlers']['file']['filename'].format(result_dir=result_dir)
@@ -38,6 +40,7 @@ def train(config_path, env_id):
     logging.config.dictConfig(logging_config)
 
     try:
+        _env._max_episode_steps = 10000
         env = RewardClippingWrapper(_env)
         # env = SuddenDeathWrapper(env)
 

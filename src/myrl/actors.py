@@ -44,6 +44,8 @@ class BaseActor:
         self.result_dir = result_dir
         self.render_episode_freq = render_episode_freq
 
+        os.makedirs(self.result_dir, exist_ok=True)
+
         # self.local_buffer = VanillaReplay()
         self.total_steps = 0
         self.total_episodes = 0
@@ -200,6 +202,17 @@ class BaseActor:
         d = OrderedDict([('episode_actions', self.episode_actions), ('episode_actions_random', self.episode_actions_random)])
         pd.DataFrame(d).to_csv(path, index=False)
 
+    def dump_summary(self, path):
+        with open(path, 'w') as f:
+            print(f'episode {self.total_episodes}', file=f)
+            print(f'episode_step {self.episode_steps}', file=f)
+            print(f'reward {self.episode_reward}', file=f)
+            print(f'time {self.timer.laptime} ({self.timer.laptime_str})', file=f)
+            print(f'fps {self.episode_steps / self.timer.laptime}', file=f)
+            print(f'episilon {self.policy.get_epsilon(self.total_steps)}', file=f)
+            print(f'total_steps {self.total_steps}', file=f)
+            print(f'total_time {self.timer.elapsed} ({self.timer.elapsed_str})', file=f)
+
 
 class QActor(BaseActor):
     def act(self):
@@ -207,7 +220,7 @@ class QActor(BaseActor):
             if self.render_episode_freq <= 0:
                 self.rendering_mode = False
             else:
-                self.rendering_mode = self.total_episodes % self.render_episode_freq == 0
+                self.rendering_mode = (self.total_episodes + 1) % self.render_episode_freq == 0
             self._reset()
 
         # get action
@@ -228,6 +241,11 @@ class QActor(BaseActor):
 
         if done:
             self.timer.lap()
+            logger.info(
+                f'finished episode {self.total_episodes} '
+                f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
+                f'({self.episode_steps / self.timer.laptime:.2f} fps) '
+                f'(epsilon {self.policy.get_epsilon(self.total_steps)}, total_steps {self.total_steps}, total_time {self.timer.elapsed_str})')
             self.dump_episode_history(
                 self.timer.laptime,
                 os.path.join(self.result_dir, 'history.csv'),
@@ -237,8 +255,6 @@ class QActor(BaseActor):
                 os.makedirs(episode_dir, exist_ok=True)
                 self.dump_step_history(os.path.join(episode_dir, 'actions.csv'))
                 self.render_episode_gif(os.path.join(episode_dir, 'play.gif'))
-            logger.info(
-                f'finished episode {self.total_episodes} '
-                f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
-                f'({self.episode_steps / self.timer.laptime:.2f} fps) '
-                f'(epsilon {self.policy.get_epsilon(self.total_steps)}, total_steps {self.total_steps}, total_time {self.timer.elapsed_str})')
+                self.dump_summary(os.path.join(episode_dir, 'summary.txt'))
+
+        return q_values, action, is_random, reward, current_step, done

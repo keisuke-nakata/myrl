@@ -5,6 +5,19 @@ class Policy:
     pass
 
 
+class Greedy(Policy):
+    def __init__(self, action_space):
+        self.action_space = action_space
+
+    def __call__(self, q_values, step):
+        action = np.argmax(q_values)
+        is_random = False
+        return action, is_random
+
+    def get_epsilon(self, *args, **kwargs):
+        return 0.0
+
+
 class EpsilonGreedy(Policy):
     def __init__(self, action_space, initial_epsilon, final_epsilon, final_exploration_step=0):
         self.action_space = action_space
