@@ -39,3 +39,4 @@ n_random_actions_at_reset = [0, 30]  # will be converted to tuple
 
 [history]
 render_episode_freq = 25  # 0: no rendering
+# render_episode_freq = 3  # 0: no rendering
