@@ -120,6 +120,8 @@ class BaseActor:
         `observation` is the raw/preprocessed observation from the env.
         `state` is the input for learners/replays, which may be stacked observations.
         """
+        self.timer.lap()
+
         observation = self.env.reset()
         self.require_reset = False
         logger.debug(f'env reset {"with" if self.rendering_mode else "without"} rendering mode')

@@ -29,7 +29,7 @@ class VanillaDQNAgent:
         self.render_episode_freq = self.config['history']['render_episode_freq']
 
         self.replay = VanillaReplay(limit=self.config['replay']['limit'] // n_action_repeat)
-        self.dummy_replay = VanillaReplay(limit=self.config['replay']['limit'] // n_action_repeat)
+        self.dummy_replay = VanillaReplay(limit=10)
         self.obs_preprocessor = AtariPreprocessor()
         self.greedy_actor = QActor(
             env=env,
