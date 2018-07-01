@@ -3,8 +3,9 @@ click>=6.7
 gym>=0.10.5
 atari-py>=0.1.1
 gym[atari]
-numpy>=1.14.3
+numpy>=1.14.5
 pandas>=0.23.1
 scikit-image>=0.13.1
 imageio>=2.3.0
 toml>=0.9.4
+pandas>=0.23.1

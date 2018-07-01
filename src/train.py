@@ -10,6 +10,7 @@ import toml
 
 from myrl import algorithms
 from myrl.env_wrappers import SuddenDeathWrapper, RewardClippingWrapper
+from visualize import _visualize
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ def train(config_path, env_id):
         logger.exception('train failed')
         with open(os.path.join(result_dir, 'error.txt'), 'a') as f:
             traceback.print_exc(file=f)
+    finally:
+        _visualize(os.path.join(result_dir, 'history.csv'), os.path.join(result_dir, 'history.png'), window=10)
+        _visualize(os.path.join(result_dir, 'greedy', 'history.csv'), os.path.join(result_dir, 'greedy', 'history.png'), window=10)
 
 
 if __name__ == '__main__':

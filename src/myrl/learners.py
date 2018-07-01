@@ -45,6 +45,7 @@ class FittedQLearner(BaseLearner):
             (measured in the number of parameter updates)
         """
         self.target_network_update_freq = kwargs.pop('target_network_update_freq', 10_000)
+        self.target_network_update_soft = kwargs.pop('target_network_update_soft', None)
         super().__init__(*args, **kwargs)
         self.target_network = self.network.copy(mode='copy')
         # TODO: target_network.to_gpu()? しなくても、たぶん勝手に同じ device に存在する状態でコピーされるっぽい？要確認
@@ -53,7 +54,6 @@ class FittedQLearner(BaseLearner):
     def _experiences2batch(self, experiences):
         if self.n_updates % self.target_network_update_freq == 0:
             self._sync_target_network()
-            logger.info(f'sync target network at learner updates {self.n_updates}')
         states, actions, rewards, next_states, dones = zip(*experiences)
 
         batch_x = to_device(self.target_network._device_id, np.asarray(states, dtype=np.float32))
@@ -77,4 +77,8 @@ class FittedQLearner(BaseLearner):
         self.optimizer.update()
 
     def _sync_target_network(self):
-        self.target_network.copyparams(self.network)
+        if self.target_network_update_soft is not None:  # soft update
+            raise NotImplementedError
+        else:  # hard update
+            self.target_network.copyparams(self.network)
+            logger.info(f'sync target network at learner updates {self.n_updates}')

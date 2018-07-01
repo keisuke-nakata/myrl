@@ -51,6 +51,7 @@ class BaseActor:
         self.total_episodes = 0
         self.require_reset = True
         self.rendering_mode = False
+        self.episode_history_dump_mode = 'w'
 
         self.timer = Timer()
         self.timer.start()
@@ -191,13 +192,17 @@ class BaseActor:
         imageio.mimwrite(path, self.episode_imgs, fps=60)
         logger.info('dump an episode at {}'.format(path))
 
-    def dump_episode_history(self, episode_seconds, history_path, mode):
+    def dump_episode_history(self, episode_seconds, history_path):
+        mode = self.episode_history_dump_mode
         with open(history_path, mode=mode) as f:
             writer = csv.writer(f)
             if mode == 'w':
-                header = ['total_episodes', 'total_steps', 'episode_steps', 'episode_reward', 'episode_seconds', 'episode_fps']
+                header = ['total_episodes', 'total_steps', 'episode_steps', 'episode_reward', 'episode_seconds', 'episode_fps', 'epsilon']
                 writer.writerow(header)
-            writer.writerow([self.total_episodes, self.total_steps, self.episode_steps, self.episode_reward, episode_seconds, self.episode_steps / episode_seconds])
+            writer.writerow([
+                self.total_episodes, self.total_steps, self.episode_steps, self.episode_reward, episode_seconds,
+                self.episode_steps / episode_seconds, self.policy.get_epsilon(self.total_steps)])
+        self.episode_history_dump_mode = 'a'
 
     def dump_step_history(self, path):
         assert self.episode_steps == len(self.episode_actions) == len(self.episode_actions_random)
@@ -248,12 +253,9 @@ class QActor(BaseActor):
                 f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
                 f'({self.episode_steps / self.timer.laptime:.2f} fps) '
                 f'(epsilon {self.policy.get_epsilon(self.total_steps)}, total_steps {self.total_steps}, total_time {self.timer.elapsed_str})')
-            self.dump_episode_history(
-                self.timer.laptime,
-                os.path.join(self.result_dir, 'history.csv'),
-                mode='w' if self.total_episodes == 1 else 'a')
+            self.dump_episode_history(self.timer.laptime, os.path.join(self.result_dir, 'history.csv'))
             if self.rendering_mode:
-                episode_dir = os.path.join(self.result_dir, 'episode{}'.format(self.total_episodes))
+                episode_dir = os.path.join(self.result_dir, f'episode{self.total_episodes:05}')
                 os.makedirs(episode_dir, exist_ok=True)
                 self.dump_step_history(os.path.join(episode_dir, 'actions.csv'))
                 self.render_episode_gif(os.path.join(episode_dir, 'play.gif'))
