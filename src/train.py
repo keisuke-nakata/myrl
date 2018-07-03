@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 def train(config_path, env_id):
     """
     CONFIG_PATH: config filepath, e.g.: configs/vanilla_dqn.toml\n
-    ENV_ID: OpenAI Gym environment id, e.g.: Pong-v4
+    ENV_ID: OpenAI Gym environment id, e.g.: PongNoFrameskip-v4
     """
     config = toml.load(config_path)
-    _env = gym.make(env_id)  # Pong-v4
+    _env = gym.make(env_id)  # PongNoFrameskip-v4
 
     now = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
     result_dir = config['result_dir'].format(env_id=_env.spec.id, now=now)
