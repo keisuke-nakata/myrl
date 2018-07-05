@@ -13,3 +13,6 @@ class VanillaReplay:
 
     def sample(self, size):
         return random.choices(self.experiences, k=size)
+
+    def __len__(self):
+        return len(self.experiences)

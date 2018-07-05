@@ -23,6 +23,7 @@ class VanillaDQNAgent:
 
         self.network = VanillaCNN(self.n_actions)  # will be shared among actor and learner
 
+        # FIXME: 引数で変えられるようにする
         gpu_id = 0
         self.network.to_gpu(gpu_id)
 
@@ -94,3 +95,6 @@ class VanillaDQNAgent:
                     if greedy_done:  # greedy_actor will render the episode automatically
                         break
                 logger.info('greedy actor is playing... done.')
+
+            if done:
+                logger.info(f'memory length at episode {total_episodes}: {len(self.replay):,}')
