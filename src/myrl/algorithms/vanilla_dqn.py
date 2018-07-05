@@ -22,6 +22,10 @@ class VanillaDQNAgent:
         self.n_actions = env.action_space.n
 
         self.network = VanillaCNN(self.n_actions)  # will be shared among actor and learner
+
+        gpu_id = 0
+        self.network.to_gpu(gpu_id)
+
         self.policy = EpsilonGreedy(action_space=env.action_space, **self.config['policy']['params'])
         self.greedy_policy = Greedy(action_space=env.action_space)
 
