@@ -66,7 +66,7 @@ class FittedQLearner(BaseLearner):
         batch_done = to_device(self.target_network._device_id, np.asarray(dones, dtype=np.float32))
         with chainer.no_backprop_mode():
             batch_target_q = self.target_network(batch_next_x)
-            batch_y = batch_reward + self.gamma * batch_done * F.max(batch_target_q, axis=1)
+            batch_y = batch_reward + self.gamma * (1 - batch_done) * F.max(batch_target_q, axis=1)
 
         return (batch_x, batch_y, batch_action)
 
