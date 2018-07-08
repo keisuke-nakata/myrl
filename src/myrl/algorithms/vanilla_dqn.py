@@ -15,17 +15,19 @@ logger = logging.getLogger(__name__)
 
 
 class VanillaDQNAgent:
-    def build(self, config, env):
+    def build(self, config, env, device=-1):
+        """
+        device: -1 (CPU), 0 (GPU)
+        """
         self.config = config
         self.env = env
 
         self.n_actions = env.action_space.n
 
         self.network = VanillaCNN(self.n_actions)  # will be shared among actor and learner
-
-        # FIXME: 引数で変えられるようにする
-        gpu_id = 0
-        self.network.to_gpu(gpu_id)
+        if device >= 0:
+            self.network.to_gpu(device)
+        logger.info(f'built an agent with device {device}.')
 
         self.policy = EpsilonGreedy(action_space=env.action_space, **self.config['policy']['params'])
         self.greedy_policy = Greedy(action_space=env.action_space)
@@ -74,11 +76,16 @@ class VanillaDQNAgent:
 
         self.actor.warmup(self.config['n_warmup_steps'])
 
+        episode_losses = []
+        episode_td_errors = []
         while total_steps < self.config['n_total_steps'] or total_episodes < self.config['n_total_episodes']:
             logger.debug(f'episode {total_episodes}, step {total_steps}')
             q_values, action, is_random, reward, current_step, done = self.actor.act()
             experiences = self.replay.sample(size=self.config['learner']['batch_size'])
-            self.learner.learn(experiences)
+
+            loss, td_error = self.learner.learn(experiences)
+            episode_losses.append(loss)
+            episode_td_errors.append(td_error)
 
             # sync-ing parameters is not necessary because the `network` instance is shared in actor and leaner
             # self.actor.load_parameters(self.learner.dump_parameters())
@@ -97,4 +104,11 @@ class VanillaDQNAgent:
                 logger.info('greedy actor is playing... done.')
 
             if done:
-                logger.info(f'memory length at episode {total_episodes}: {len(self.replay):,}')
+                logger.info(
+                    f'episode {total_episodes}: '
+                    f'memory length {len(self.replay):,}, '
+                    f'avg loss {sum(episode_losses) / len(episode_losses):.4}, '
+                    f'avg TD error {sum(episode_td_errors) / len(episode_td_errors):.4}')
+                episode_losses = []
+                episode_td_errors = []
+                # FIXME: loss, td_error をファイルにも書き出す

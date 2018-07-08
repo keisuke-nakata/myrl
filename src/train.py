@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.argument('config_path', type=click.Path(exists=True))
 @click.argument('env_id')
-def train(config_path, env_id):
+@click.option('--device', default=-1, show_default=True)
+def train(config_path, env_id, device):
     """
     CONFIG_PATH: config filepath, e.g.: configs/vanilla_dqn.toml\n
     ENV_ID: OpenAI Gym environment id, e.g.: PongNoFrameskip-v4
@@ -46,7 +47,7 @@ def train(config_path, env_id):
         # env = SuddenDeathWrapper(env)
 
         agent = algorithms.vanilla_dqn.VanillaDQNAgent()
-        agent.build(config, env)
+        agent.build(config, env, device)
         logger.info('training start')
         agent.train()
         logger.info('training end')

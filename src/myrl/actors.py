@@ -75,7 +75,7 @@ class BaseActor:
                     f'finished warmup episode {self.total_episodes} '
                     f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
                     f'({self.episode_steps / self.timer.laptime:.2f} fps) '
-                    f'(total_steps {self.total_steps}, total_time {self.timer.elapsed_str})')
+                    f'(total_steps {self.total_steps:,}, total_time {self.timer.elapsed_str})')
                 self._reset()
             step += current_step
         # restore counter and env
@@ -252,7 +252,7 @@ class QActor(BaseActor):
                 f'finished episode {self.total_episodes} '
                 f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
                 f'({self.episode_steps / self.timer.laptime:.2f} fps) '
-                f'(epsilon {self.policy.get_epsilon(self.total_steps)}, total_steps {self.total_steps:,}, total_time {self.timer.elapsed_str})')
+                f'(epsilon {self.policy.get_epsilon(self.total_steps):.4}, total_steps {self.total_steps:,}, total_time {self.timer.elapsed_str})')
             self.dump_episode_history(self.timer.laptime, os.path.join(self.result_dir, 'history.csv'))
             if self.rendering_mode:
                 episode_dir = os.path.join(self.result_dir, f'episode{self.total_episodes:05}')

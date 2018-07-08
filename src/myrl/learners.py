@@ -10,6 +10,8 @@ from chainer.dataset.convert import to_device
 
 logger = logging.getLogger(__name__)
 
+CPU_ID = -1
+
 
 class BaseLearner:
     def __init__(self, network, optimizer, gamma=0.99):
@@ -23,8 +25,9 @@ class BaseLearner:
 
     def learn(self, experiences):
         batch = self._experiences2batch(experiences)
-        self._learn(batch)
+        loss, td_error = self._learn(batch)
         self.n_updates += 1
+        return loss, td_error
 
     def dump_parameters(self, path):
         save_hdf5(filename=path, obj=self.network)
@@ -75,6 +78,12 @@ class FittedQLearner(BaseLearner):
         self.network.cleargrads()
         loss.backward()
         self.optimizer.update()
+
+        with chainer.no_backprop_mode():
+            td_error = F.mean_absolute_error(batch_q, batch_y)
+        loss_cpu = to_device(CPU_ID, loss.array)
+        td_error_cpu = to_device(CPU_ID, td_error.array)
+        return loss_cpu, td_error_cpu
 
     def _sync_target_network(self):
         if self.target_network_update_soft is not None:  # soft update
