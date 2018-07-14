@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.argument('config_path', type=click.Path(exists=True))
 @click.argument('env_id')
-@click.option('--device', default=-1, show_default=True)
+@click.option('--device', default=0, show_default=True, help='device id. -1: CPU, >=0: GPU (s).')
 def train(config_path, env_id, device):
     """
     CONFIG_PATH: config filepath, e.g.: configs/vanilla_dqn.toml\n

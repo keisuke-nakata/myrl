@@ -97,6 +97,7 @@ class VanillaDQNAgent:
             if done and total_episodes % self.render_episode_freq == 0:
                 logger.info('greedy actor is playing...')
                 self.greedy_actor.total_episodes = total_episodes - 1
+                self.greedy_actor.total_steps = total_steps
                 while True:
                     greedy_q_values, greedy_action, greedy_is_random, greedy_reward, greedy_current_step, greedy_done = self.greedy_actor.act()
                     if greedy_done:  # greedy_actor will render the episode automatically
