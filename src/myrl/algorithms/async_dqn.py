@@ -1,6 +1,6 @@
 import logging
 import os
-from multiprocessing import Process
+import multiprocessing
 
 from chainer import optimizers
 
@@ -16,7 +16,7 @@ from ..env_wrappers import setup_env
 logger = logging.getLogger(__name__)
 
 
-class VanillaDQNAgent:
+class AsyncDQNAgent:
     def build(self, config, env_id, device=0):
         """
         device: -1 (CPU), 0 (GPU)
@@ -29,25 +29,25 @@ class VanillaDQNAgent:
 
         self.n_actions = self.env.action_space.n
 
-        self.network = VanillaCNN(self.n_actions)  # will be shared among actor and learner
+        self.learner_network = VanillaCNN(self.n_actions)
+        self.actor_network = self.learner_network.copy(mode='copy')
         if device >= 0:
-            self.network.to_gpu(device)
-        logger.info(f'built an agent with device {device}.')
+            self.learner_network.to_gpu(device)
+        logger.info(f'built an learner_network with device {device}.')
 
         self.policy = EpsilonGreedy(action_space=self.clipped_env.action_space, **self.config['policy']['params'])
         self.greedy_policy = Greedy(action_space=self.env.action_space)
 
-        n_action_repeat = self.config['actor']['n_action_repeat']
+        self.n_action_repeat = self.config['actor']['n_action_repeat']
         self.render_episode_freq = self.config['history']['render_episode_freq']
 
-        # self.replay = VanillaReplay(limit=self.config['replay']['limit'] // n_action_repeat)
-        # self.dummy_replay = VanillaReplay(limit=10)
+        self.replay = RedisReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
+        self.replay.flush()
         self.obs_preprocessor = AtariPreprocessor()
         self.greedy_actor = QActor(
             env=self.env,
-            network=self.network,
+            network=self.actor_network,
             policy=self.greedy_policy,
-            # global_replay=self.dummy_replay,
             n_action_repeat=1,
             obs_preprocessor=self.obs_preprocessor,
             n_random_actions_at_reset=(0, 0),
@@ -56,10 +56,9 @@ class VanillaDQNAgent:
             render_episode_freq=1)
         self.actor = QActor(
             env=self.clipped_env,
-            network=self.network,
+            network=self.actor_network,
             policy=self.policy,
-            # global_replay=self.replay,
-            n_action_repeat=n_action_repeat,
+            n_action_repeat=self.n_action_repeat,
             obs_preprocessor=self.obs_preprocessor,
             n_random_actions_at_reset=tuple(self.config['actor']['n_random_actions_at_reset']),
             n_stack_frames=self.config['n_stack_frames'],
@@ -67,39 +66,25 @@ class VanillaDQNAgent:
             render_episode_freq=self.render_episode_freq)
         optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
         self.learner = FittedQLearner(
-            network=self.network,
+            network=self.learner_network,
             optimizer=optimizer,
             gamma=self.config['learner']['gamma'],
             target_network_update_freq=self.config['learner']['target_network_update_freq'])
 
         logger.debug(f'build a VanillaDQNAgent, {self.clipped_env}')
 
-    def train(self):
-        """同期更新なので単なるループでOK"""
+    def _act(self):
         total_steps = 0
         total_episodes = 0
 
-        # warmup
-        for exps in self.actor.warmup_act(self.config['n_warmup_steps']):
-            self.replay.mpush(exps)
+        replay = RedisReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
 
-        episode_losses = []
-        episode_td_errors = []
         while total_steps < self.config['n_total_steps'] or total_episodes < self.config['n_total_episodes']:
             logger.debug(f'episode {total_episodes}, step {total_steps}')
             # actor
             # q_values, action, is_random, reward, current_step, done = self.actor.act()
             experience, done = self.actor.act()
-            self.replay.push(experience)
-
-            # learner
-            experiences = self.replay.sample(size=self.config['learner']['batch_size'])
-            loss, td_error = self.learner.learn(experiences)
-            episode_losses.append(loss)
-            episode_td_errors.append(td_error)
-
-            # sync-ing parameters is not necessary because the `network` instance is shared in actor and leaner
-            # self.actor.load_parameters(self.learner.dump_parameters())
+            replay.push(experience)
 
             total_steps = self.actor.total_steps
             total_episodes = self.actor.total_episodes
@@ -116,12 +101,24 @@ class VanillaDQNAgent:
                         break
                 logger.info('greedy actor is playing... done.')
 
-            if done:
-                logger.info(
-                    f'episode {total_episodes}: '
-                    f'memory length {len(self.replay):,}, '
-                    f'avg loss {sum(episode_losses) / len(episode_losses):.4}, '
-                    f'avg TD error {sum(episode_td_errors) / len(episode_td_errors):.4}')
-                episode_losses = []
-                episode_td_errors = []
-                # FIXME: loss, td_error をファイルにも書き出す
+    def _learn(self):
+        replay = RedisReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
+
+        while True:
+            experiences = replay.sample(size=self.config['learner']['batch_size'])
+            self.learner.learn(experiences)
+            print('learn')
+
+    def train(self):
+        # warmup
+        for exps in self.actor.warmup_act(self.config['n_warmup_steps']):
+            self.replay.mpush(exps)
+
+        proc_learner = multiprocessing.Process(target=self._learn)
+        proc_actor = multiprocessing.Process(target=self._act)
+
+        proc_learner.start()
+        proc_actor.start()
+
+        proc_actor.join()
+        proc_learner.terminate()

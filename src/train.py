@@ -5,11 +5,9 @@ import os
 import traceback
 
 import click
-import gym
 import toml
 
 from myrl import algorithms
-from myrl.env_wrappers import SuddenDeathWrapper, RewardClippingWrapper
 from visualize import _visualize
 
 
@@ -19,17 +17,18 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.argument('config_path', type=click.Path(exists=True))
 @click.argument('env_id')
+@click.argument('agent_name')
 @click.option('--device', default=0, show_default=True, help='device id. -1: CPU, >=0: GPU (s).')
-def train(config_path, env_id, device):
+def train(config_path, env_id, agent_name, device):
     """
     CONFIG_PATH: config filepath, e.g.: configs/vanilla_dqn.toml\n
-    ENV_ID: OpenAI Gym environment id, e.g.: PongNoFrameskip-v4
+    ENV_ID: OpenAI Gym environment id, e.g.: PongNoFrameskip-v4\n
+    AGENT_NAME: Agent class name, e.g.: VanillaDQNAgent
     """
     config = toml.load(config_path)
-    _env = gym.make(env_id)  # PongNoFrameskip-v4
 
     now = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
-    result_dir = config['result_dir'].format(env_id=_env.spec.id, now=now)
+    result_dir = config['result_dir'].format(env_id=env_id, now=now)
     config['result_dir'] = result_dir
     os.makedirs(result_dir, exist_ok=True)
     with open(os.path.join(result_dir, 'config.toml'), 'w') as f:
@@ -42,12 +41,13 @@ def train(config_path, env_id, device):
     logging.config.dictConfig(logging_config)
 
     try:
-        _env._max_episode_steps = 10000
-        env = RewardClippingWrapper(_env)
-        # env = SuddenDeathWrapper(env)
-
-        agent = algorithms.vanilla_dqn.VanillaDQNAgent()
-        agent.build(config, env, device)
+        if agent_name == 'VanillaDQNAgent':
+            agent = algorithms.vanilla_dqn.VanillaDQNAgent()
+        elif agent_name == 'AsyncDQNAgent':
+            agent = algorithms.async_dqn.AsyncDQNAgent()
+        else:
+            raise ValueError(f'Unknown agent: {agent_name}')
+        agent.build(config, env_id, device)
         logger.info('training start')
         agent.train()
         logger.info('training end')

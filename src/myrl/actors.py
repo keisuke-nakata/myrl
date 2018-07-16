@@ -23,7 +23,7 @@ CPU_ID = -1
 class BaseActor:
     def __init__(
             self,
-            env, network, policy, global_replay,
+            env, network, policy,
             n_action_repeat=1, obs_preprocessor=None, n_random_actions_at_reset=(0, 0), n_stack_frames=1,
             result_dir='./', render_episode_freq=10):
         if n_action_repeat != n_stack_frames:
@@ -33,7 +33,6 @@ class BaseActor:
         self.env = env
         self.network = network
         self.policy = policy
-        self.global_replay = global_replay
         self.n_action_repeat = n_action_repeat
         if obs_preprocessor is None:
             self.obs_preprocessor = DoNothingPreprocessor()
@@ -46,7 +45,7 @@ class BaseActor:
 
         os.makedirs(self.result_dir, exist_ok=True)
 
-        # self.local_buffer = VanillaReplay()
+        self.local_buffer = []
         self.total_steps = 0
         self.total_episodes = 0
         self.require_reset = True
@@ -58,31 +57,6 @@ class BaseActor:
 
     def load_parameters(self, parameters):
         raise NotImplementedError
-
-    def warmup(self, n_steps):
-        logger.info(f'warming up {n_steps} steps...')
-        self._reset()
-
-        step = 0
-        self.timer.lap()
-        while step < n_steps:
-            action = self.env.action_space.sample()
-            reward, done, current_step = self._repeat_action(action, is_random=True)
-            self.global_replay.push((self.previous_state, np.int32(action), reward, self.state, done))
-            if done:
-                self.timer.lap()
-                logger.info(
-                    f'finished warmup episode {self.total_episodes} '
-                    f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
-                    f'({self.episode_steps / self.timer.laptime:.2f} fps) '
-                    f'(total_steps {self.total_steps:,}, total_time {self.timer.elapsed_str})')
-                self._reset()
-            step += current_step
-        # restore counter and env
-        self.total_steps = 0
-        self.total_episodes = 0
-        self.require_reset = True
-        logger.info(f'warming up {n_steps} steps... done ({step} steps).')
 
     def _repeat_action(self, action, is_random):
         """与えられた行動を n 回繰り返す。
@@ -222,6 +196,36 @@ class BaseActor:
 
 
 class QActor(BaseActor):
+    def warmup_act(self, n_steps):
+        logger.info(f'warming up {n_steps} steps...')
+        self._reset()
+
+        step = 0
+        self.timer.lap()
+        while step < n_steps:
+            action = self.env.action_space.sample()
+            reward, done, current_step = self._repeat_action(action, is_random=True)
+            experience = (self.previous_state, np.int32(action), reward, self.state, done)
+            self.local_buffer.append(experience)
+            if done:
+                self.timer.lap()
+                yield self.local_buffer
+                self.local_buffer = []
+                logger.info(
+                    f'finished warmup episode {self.total_episodes} '
+                    f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
+                    f'({self.episode_steps / self.timer.laptime:.2f} fps) '
+                    f'(total_steps {self.total_steps:,}, total_time {self.timer.elapsed_str})')
+                self._reset()
+            step += current_step
+        # restore counter and env
+        self.total_steps = 0
+        self.total_episodes = 0
+        self.require_reset = True
+        yield self.local_buffer
+        self.local_buffer = []
+        logger.info(f'warming up {n_steps} steps... done ({step} steps).')
+
     def act(self):
         if self.require_reset:
             if self.render_episode_freq <= 0:
@@ -240,11 +244,12 @@ class QActor(BaseActor):
         # interact with env
         reward, done, current_step = self._repeat_action(action, is_random=is_random)
 
+        experience = (self.previous_state, np.int32(action), reward, self.state, done)
         # push experience to replay buffer
         # self.local_buffer.push((self._last_state, action, reward, self.episode_steps))
         # if len(self.local_buffer) >= local_buffer_size:  # TODO
         #     self.local_buffer.forward_to_replay()  # TODO
-        self.global_replay.push((self.previous_state, np.int32(action), reward, self.state, done))
+        # self.global_replay.push((self.previous_state, np.int32(action), reward, self.state, done))
 
         if done:
             self.timer.lap()
@@ -261,4 +266,13 @@ class QActor(BaseActor):
                 self.render_episode_gif(os.path.join(episode_dir, 'play.gif'))
                 self.dump_summary(os.path.join(episode_dir, 'summary.txt'))
 
-        return q_values, action, is_random, reward, current_step, done
+        # return q_values, action, is_random, reward, current_step, done
+        return experience, done
+
+    def act_episode(self):
+        while True:
+            experience, done = self.act()
+            self.local_buffer.append(experience)
+            if done:
+                yield self.local_buffer
+                self.local_buffer = []

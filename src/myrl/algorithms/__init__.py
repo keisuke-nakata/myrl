@@ -1,1 +1,1 @@
-from . import vanilla_dqn
+from . import vanilla_dqn, async_dqn

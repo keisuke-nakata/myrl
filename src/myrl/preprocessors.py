@@ -37,6 +37,12 @@ class Float32:
         ret = np.asarray(observation, dtype=np.float32)
         return ret
 
+#
+# class UInt8:
+#     def __call__(self, observation, last_observation):
+#         ret = (observation * 255).astype(np.uint8)
+#         return ret
+# 
 
 class AtariPreprocessor:
     def __init__(self):
