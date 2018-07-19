@@ -35,6 +35,8 @@ class AsyncDQNAgent:
             self.learner_network.to_gpu(device)
         logger.info(f'built an learner_network with device {device}.')
 
+        self.network_dump_path = os.path.join(self.config['result_dir'], 'network.hdf5')
+
         self.policy = EpsilonGreedy(action_space=self.clipped_env.action_space, **self.config['policy']['params'])
         self.greedy_policy = Greedy(action_space=self.env.action_space)
 
@@ -69,7 +71,8 @@ class AsyncDQNAgent:
             network=self.learner_network,
             optimizer=optimizer,
             gamma=self.config['learner']['gamma'],
-            target_network_update_freq=self.config['learner']['target_network_update_freq'])
+            target_network_update_freq=self.config['learner']['target_network_update_freq'],
+            logging_freq=self.config['learner']['logging_freq'])
 
         logger.debug(f'build a VanillaDQNAgent, {self.clipped_env}')
 
@@ -100,14 +103,18 @@ class AsyncDQNAgent:
                     if greedy_done:  # greedy_actor will render the episode automatically
                         break
                 logger.info('greedy actor is playing... done.')
+            if self.config['actor']['load_freq'] != 0 and total_steps % self.config['actor']['load_freq'] == 0:
+                self.actor.load_parameters(self.network_dump_path)
 
     def _learn(self):
         replay = RedisReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
+        self.learner.dump_parameters(self.network_dump_path)  # initial parameter
 
         while True:
             experiences = replay.sample(size=self.config['learner']['batch_size'])
             self.learner.learn(experiences)
-            print('learn')
+            if self.config['learner']['dump_freq'] != 0 and self.learner.total_updates % self.config['learner']['dump_freq'] == 0:
+                self.learner.dump_parameters(self.network_dump_path)
 
     def train(self):
         # warmup

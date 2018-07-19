@@ -10,7 +10,7 @@ import imageio
 import pandas as pd
 import chainer
 from chainer.dataset.convert import to_device
-# from ..replays import VanillaReplay
+from chainer.serializers import load_hdf5
 
 from .preprocessors import DoNothingPreprocessor
 from .utils import Timer
@@ -55,8 +55,9 @@ class BaseActor:
         self.timer = Timer()
         self.timer.start()
 
-    def load_parameters(self, parameters):
-        raise NotImplementedError
+    def load_parameters(self, path):
+        load_hdf5(path, self.network)
+        logger.info(f'load parameters from {path}')
 
     def _repeat_action(self, action, is_random):
         """与えられた行動を n 回繰り返す。
@@ -258,7 +259,7 @@ class QActor(BaseActor):
                 f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
                 f'({self.episode_steps / self.timer.laptime:.2f} fps) '
                 f'(epsilon {self.policy.get_epsilon(self.total_steps):.4}, total_steps {self.total_steps:,}, total_time {self.timer.elapsed_str})')
-            self.dump_episode_history(self.timer.laptime, os.path.join(self.result_dir, 'history.csv'))
+            self.dump_episode_history(self.timer.laptime, os.path.join(self.result_dir, 'actor_history.csv'))
             if self.rendering_mode:
                 episode_dir = os.path.join(self.result_dir, f'episode{self.total_episodes:05}')
                 os.makedirs(episode_dir, exist_ok=True)

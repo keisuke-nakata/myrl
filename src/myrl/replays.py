@@ -1,8 +1,11 @@
 import random
 import pickle
+import logging
 
 import redis
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class VanillaReplay:
@@ -32,6 +35,11 @@ class RedisReplay:
         self.limit = limit
         self.listname = listname
         self._redis = redis.StrictRedis(host=host, port=port, db=db)
+        try:
+            self._redis.ping()
+        except redis.exceptions.ConnectionError:
+            logger.exception('Failed to connect Redis server. Check host/port/status of redis server.')
+            raise
 
     def push(self, experience):
         self._redis.lpush(self.listname, pickle.dumps(experience))

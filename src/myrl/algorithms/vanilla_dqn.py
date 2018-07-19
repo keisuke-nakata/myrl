@@ -70,7 +70,8 @@ class VanillaDQNAgent:
             network=self.network,
             optimizer=optimizer,
             gamma=self.config['learner']['gamma'],
-            target_network_update_freq=self.config['learner']['target_network_update_freq'])
+            target_network_update_freq=self.config['learner']['target_network_update_freq'],
+            logging_freq=self.config['learner']['logging_freq'])
 
         logger.debug(f'build a VanillaDQNAgent, {self.clipped_env}')
 

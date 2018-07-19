@@ -17,8 +17,8 @@ limit = 400000  # requires approximately 25 GB memory (with `n_action_repeat = 4
 [policy.params]
 initial_epsilon = 1.0
 final_epsilon = 0.1
-# final_exploration_step = 1000000
-final_exploration_step = 4000000
+# final_exploration_step = 1_000_000
+final_exploration_step = 4_000_000
 
 
 [optimizer]
@@ -33,12 +33,17 @@ eps = 0.01
 [learner]
 gamma = 0.99
 batch_size = 32
-target_network_update_freq = 10000
+target_network_update_freq = 10_000
 # target_network_update_soft = 0.01
+logging_freq = 2000
+dump_freq = 2000
+
 
 [actor]
 n_action_repeat = 4
 n_random_actions_at_reset = [0, 30]  # will be converted to tuple
+load_freq = 2000
+
 
 [history]
 # 1 episodes dump requres approximately 30 MB disk (in AlienNoFrameskip-v4. Twice the value if you have a greedy actor).
