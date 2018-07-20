@@ -54,8 +54,7 @@ class AsyncDQNAgent:
             obs_preprocessor=self.obs_preprocessor,
             n_random_actions_at_reset=(0, 0),
             n_stack_frames=self.config['n_stack_frames'],
-            result_dir=os.path.join(self.config['result_dir'], 'greedy'),
-            render_episode_freq=1)
+            result_dir=os.path.join(self.config['result_dir'], 'greedy'))
         self.actor = QActor(
             env=self.clipped_env,
             network=self.actor_network,
@@ -64,8 +63,7 @@ class AsyncDQNAgent:
             obs_preprocessor=self.obs_preprocessor,
             n_random_actions_at_reset=tuple(self.config['actor']['n_random_actions_at_reset']),
             n_stack_frames=self.config['n_stack_frames'],
-            result_dir=self.config['result_dir'],
-            render_episode_freq=self.render_episode_freq)
+            result_dir=self.config['result_dir'])
         optimizer = getattr(optimizers, self.config['optimizer']['optimizer'])(**self.config['optimizer']['params'])
         self.learner = FittedQLearner(
             network=self.learner_network,
@@ -76,53 +74,49 @@ class AsyncDQNAgent:
 
         logger.debug(f'build a VanillaDQNAgent, {self.clipped_env}')
 
-    def _act(self):
-        total_steps = 0
-        total_episodes = 0
-
+    def _act(self, lock):
         replay = RedisReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
 
-        while total_steps < self.config['n_total_steps'] or total_episodes < self.config['n_total_episodes']:
-            logger.debug(f'episode {total_episodes}, step {total_steps}')
+        while self.actor.total_steps < self.config['n_total_steps'] or self.actor.total_episodes < self.config['n_total_episodes']:
+            logger.debug(f'episode {self.actor.total_episodes}, step {self.actor.total_steps}')
             # actor
-            # q_values, action, is_random, reward, current_step, done = self.actor.act()
             experience, done = self.actor.act()
             replay.push(experience)
 
-            total_steps = self.actor.total_steps
-            total_episodes = self.actor.total_episodes
-
-            # greedy actor's play
-            if done and total_episodes % self.render_episode_freq == 0:
+            # dump episode and greedy actor's play
+            if done and self.actor.total_episodes % self.render_episode_freq == 0:
+                self.actor.dump_episode()
                 logger.info('greedy actor is playing...')
-                self.greedy_actor.total_episodes = total_episodes - 1
-                self.greedy_actor.total_steps = total_steps
-                while True:
-                    # greedy_q_values, greedy_action, greedy_is_random, greedy_reward, greedy_current_step, greedy_done = self.greedy_actor.act()
-                    greedy_experience, greedy_done = self.greedy_actor.act()
-                    if greedy_done:  # greedy_actor will render the episode automatically
-                        break
+                self.greedy_actor.total_episodes = self.actor.total_episodes - 1
+                self.greedy_actor.total_steps = self.actor.total_steps
+                self.greedy_actor.act_episode()
+                self.greedy_actor.dump_episode()
                 logger.info('greedy actor is playing... done.')
-            if self.config['actor']['load_freq'] != 0 and total_steps % self.config['actor']['load_freq'] == 0:
-                self.actor.load_parameters(self.network_dump_path)
+            if self.config['actor']['load_freq'] != 0 and self.actor.total_steps % self.config['actor']['load_freq'] == 0:
+                with lock:
+                    self.actor.load_parameters(self.network_dump_path)
 
-    def _learn(self):
+    def _learn(self, lock):
         replay = RedisReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
-        self.learner.dump_parameters(self.network_dump_path)  # initial parameter
+        with lock:
+            self.learner.dump_parameters(self.network_dump_path)  # initial parameter
 
         while True:
             experiences = replay.sample(size=self.config['learner']['batch_size'])
             self.learner.learn(experiences)
             if self.config['learner']['dump_freq'] != 0 and self.learner.total_updates % self.config['learner']['dump_freq'] == 0:
-                self.learner.dump_parameters(self.network_dump_path)
+                with lock:
+                    self.learner.dump_parameters(self.network_dump_path)
 
     def train(self):
         # warmup
         for exps in self.actor.warmup_act(self.config['n_warmup_steps']):
-            self.replay.mpush(exps)
+            if len(exps) > 0:
+                self.replay.mpush(exps)
 
-        proc_learner = multiprocessing.Process(target=self._learn)
-        proc_actor = multiprocessing.Process(target=self._act)
+        lock = multiprocessing.Lock()
+        proc_learner = multiprocessing.Process(target=self._learn, args=(lock, ))
+        proc_actor = multiprocessing.Process(target=self._act, args=(lock, ))
 
         proc_learner.start()
         proc_actor.start()

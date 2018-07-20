@@ -1,5 +1,5 @@
-n_warmup_steps = 50000
-# n_warmup_steps = 100
+# n_warmup_steps = 50000
+n_warmup_steps = 100
 n_total_steps = 50000000
 n_total_episodes = 600
 n_stack_frames = 4
@@ -36,7 +36,8 @@ batch_size = 32
 target_network_update_freq = 10_000
 # target_network_update_soft = 0.01
 logging_freq = 2000
-dump_freq = 2000
+# dump_freq = 2000
+dump_freq = 100
 
 
 [actor]

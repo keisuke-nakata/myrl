@@ -40,6 +40,8 @@ class RedisReplay:
         except redis.exceptions.ConnectionError:
             logger.exception('Failed to connect Redis server. Check host/port/status of redis server.')
             raise
+        else:
+            logger.info('success to ping redis server')
 
     def push(self, experience):
         self._redis.lpush(self.listname, pickle.dumps(experience))
