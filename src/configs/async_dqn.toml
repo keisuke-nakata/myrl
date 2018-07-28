@@ -1,5 +1,6 @@
 agent_name = "AsyncDQNAgent"
-n_warmup_steps = 50_000
+# n_warmup_steps = 50_000
+n_warmup_steps = 5_000
 # n_warmup_steps = 100
 n_total_steps = 50_000_000
 n_total_episodes = 600
@@ -11,7 +12,8 @@ result_dir = "results/async_dqn/{env_id}/{now}"
 [replay]
 # limit = 1_000_000  # requires approximately 62.5 GB memory (with `n_action_repeat = 4`)
 # limit = 800_000  # requires approximately 50 GB memory (with `n_action_repeat = 4`)
-limit = 400_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
+# limit = 400_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
+limit = 10_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
 
 [policy]
 

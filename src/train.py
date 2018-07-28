@@ -55,8 +55,9 @@ def train(config_path, env_id, device):
         with open(os.path.join(result_dir, 'error.txt'), 'a') as f:
             traceback.print_exc(file=f)
     finally:
-        _visualize(os.path.join(result_dir, 'history.csv'), os.path.join(result_dir, 'history.png'), window=10)
-        _visualize(os.path.join(result_dir, 'greedy', 'history.csv'), os.path.join(result_dir, 'greedy', 'history.png'), window=10)
+        # _visualize(os.path.join(result_dir, 'history.csv'), os.path.join(result_dir, 'history.png'), window=10)
+        # _visualize(os.path.join(result_dir, 'greedy', 'history.csv'), os.path.join(result_dir, 'greedy', 'history.png'), window=10)
+        pass
 
 
 if __name__ == '__main__':

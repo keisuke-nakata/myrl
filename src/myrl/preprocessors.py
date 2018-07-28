@@ -60,11 +60,3 @@ class AtariPreprocessor:
         # observation = self.float32(observation, last_observation)
         observation = self.uint8(observation, last_observation)
         return observation
-#
-#
-# class AtariPostprocessor:
-#     def __init__(self):
-#         """memory -> learner"""
-#         self.float32 = Float32()
-#
-#     def __call__(self,

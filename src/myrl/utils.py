@@ -54,10 +54,13 @@ class Timer:
         return self.tostr(self.laptime)
 
 
-def report_error(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        try:
-            f(*args, **kwargs)
-        except Exception as e:
-            traceback.print!!!!
+def report_error(_logger):
+    def _report_error(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                func(*args, **kwargs)
+            except Exception as e:
+                _logger.exception(e)
+        return wrapper
+    return _report_error

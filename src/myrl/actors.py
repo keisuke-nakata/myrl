@@ -106,7 +106,6 @@ class BaseActor:
         self.episode_actions_is_random = []
         self.episode_obses = []
         self.episode_imgs = []
-        self.local_experience_buffer = []
 
         for _ in range(self.n_stack_frames):
             self._push_episode_obs(observation.copy())  # fill episode_obses with the first frame
@@ -202,6 +201,7 @@ class QActor(BaseActor):
     def warmup_act(self, n_steps):
         logger.info(f'warming up {n_steps} steps...')
         self._reset()
+        experience_buffer = []
 
         step = 0
         self.timer.lap()
@@ -209,23 +209,24 @@ class QActor(BaseActor):
             action = self.env.action_space.sample()
             reward, done, current_step = self._repeat_action(action, is_random=True)
             experience = (self.previous_state, np.int32(action), reward, self.state, done)
-            self.local_experience_buffer.append(experience)
+            experience_buffer.append(experience)
             if done:
                 self.timer.lap()
-                yield self.local_experience_buffer
+                yield experience_buffer
                 logger.info(
                     f'finished warmup episode {self.total_episodes} '
                     f'with reward {self.episode_reward}, step {self.episode_steps} in {self.timer.laptime_str} '
                     f'({self.episode_steps / self.timer.laptime:.2f} fps) '
                     f'(total_steps {self.total_steps:,}, total_time {self.timer.elapsed_str})')
                 self._reset()
+                experience_buffer = []
             step += current_step
         # restore counter and env
         self.total_steps = 0
         self.total_episodes = 0
         self.is_done = True  # force "require_reset"
         logger.info(f'warming up {n_steps} steps... done ({step} steps).')
-        yield self.local_experience_buffer
+        yield experience_buffer
 
     def act(self):
         if self.is_done:
@@ -255,8 +256,9 @@ class QActor(BaseActor):
         return experience, done
 
     def act_episode(self):
+        experience_buffer = []
         while True:
             experience, done = self.act()
-            self.local_experience_buffer.append(experience)
+            experience_buffer.append(experience)
             if done:
-                return self.local_experience_buffer
+                return experience_buffer

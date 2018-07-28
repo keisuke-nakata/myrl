@@ -1,6 +1,8 @@
 import random
 import pickle
 import logging
+import ctypes as C
+import base64
 
 import redis
 import numpy as np
@@ -61,3 +63,64 @@ class RedisReplay:
 
     def flush(self):
         return self._redis.flushall()
+
+
+class SharedReplay:
+    class AtariExperience(C.Structure):
+        _shape = (4, 84, 84)  # FIXME: magic number
+        _dtype = np.uint8  # FIXME: magic number
+        _size = len(base64.b64encode(np.empty(_shape, dtype=_dtype)))
+        _fields_ = [
+            ('state', C.c_char * _size),
+            ('action', C.c_int),
+            ('reward', C.c_double),
+            ('next_state', C.c_char * _size),
+            ('done', C.c_bool), ]
+
+    def __init__(self, limit=1_000_000 // 4):
+        # limit: divided by action repeat
+        self.limit = limit
+        self._dtype = self.AtariExperience._dtype
+        self._shape = self.AtariExperience._shape
+        self._len = 0
+
+    def push(self, experience, memory, head):
+        state, action, reward, next_state, done = experience
+        data = (
+            base64.b64encode(np.ascontiguousarray(state)),
+            int(action),
+            float(reward),
+            base64.b64encode(np.ascontiguousarray(next_state)),
+            bool(done), )
+        memory[head.value] = data
+        with head.get_lock():
+            val = head.value + 1
+            if self._len < self.limit:
+                self._len = val
+                if self.is_filled:
+                    logger.info('Memory is filled.')
+            head.value = val % self.limit
+
+    def mpush(self, experiences, memory, head):
+        for exp in experiences:
+            self.push(exp, memory, head)
+
+    def sample(self, size, memory, head):
+        high = self.limit if self.is_filled else head.value
+        idxs = np.random.randint(0, high=high, size=size)
+        data = [
+            (
+                np.frombuffer(base64.decodebytes(memory[idx].state), dtype=self._dtype).reshape(self._shape),
+                memory[idx].action,
+                memory[idx].reward,
+                np.frombuffer(base64.decodebytes(memory[idx].next_state), dtype=self._dtype).reshape(self._shape),
+                memory[idx].done,
+            ) for idx in idxs]
+        return data
+
+    def __len__(self):
+        return self._len
+
+    @property
+    def is_filled(self):
+        return len(self) == self.limit
