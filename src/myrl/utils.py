@@ -1,4 +1,6 @@
 import time
+from functools import wraps
+import traceback
 
 
 class Timer:
@@ -50,3 +52,12 @@ class Timer:
     @property
     def laptime_str(self):
         return self.tostr(self.laptime)
+
+
+def report_error(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            f(*args, **kwargs)
+        except Exception as e:
+            traceback.print!!!!

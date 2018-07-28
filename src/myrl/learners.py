@@ -41,9 +41,9 @@ class BaseLearner:
             self.timer.lap()
             n = len(self.losses)
             logger.info(
-                f'finished {n} updates with avg loss {sum(self.losses) / n}, td_error {sum(self.td_errors) / n} in {self.timer.laptime_str} '
-                f'({self.total_updates / self.timer.laptime:.2f} fps) '
-                f'(total_updates {self.total_steps:,}, total_time {self.timer.elapsed_str})')
+                f'finished {n} updates with avg loss {sum(self.losses) / n:.5f}, td_error {sum(self.td_errors) / n:.5f} in {self.timer.laptime_str} '
+                f'({n / self.timer.laptime:.2f} batches (updates) per seconds) '
+                f'(total_updates {self.total_updates:,}, total_time {self.timer.elapsed_str})')
             self.losses = []
             self.td_errors = []
         return loss, td_error
@@ -79,9 +79,11 @@ class FittedQLearner(BaseLearner):
             self._sync_target_network()
         states, actions, rewards, next_states, dones = zip(*experiences)
 
-        batch_x = to_device(self.target_network._device_id, np.asarray(states, dtype=np.float32))
+        # batch_x = to_device(self.target_network._device_id, np.asarray(states, dtype=np.float32))
+        batch_x = to_device(self.target_network._device_id, np.asarray(states, dtype=np.float32) / 255)
         batch_action = to_device(self.target_network._device_id, np.asarray(actions, dtype=np.int32))
-        batch_next_x = to_device(self.target_network._device_id, np.asarray(next_states, dtype=np.float32))
+        # batch_next_x = to_device(self.target_network._device_id, np.asarray(next_states, dtype=np.float32))
+        batch_next_x = to_device(self.target_network._device_id, np.asarray(next_states, dtype=np.float32) / 255)
         batch_reward = to_device(self.target_network._device_id, np.asarray(rewards, dtype=np.float32))
         batch_done = to_device(self.target_network._device_id, np.asarray(dones, dtype=np.float32))
         with chainer.no_backprop_mode():

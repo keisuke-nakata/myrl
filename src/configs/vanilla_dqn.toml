@@ -1,16 +1,17 @@
-n_warmup_steps = 50000
+agent_name = "VanillaDQNAgent"
+n_warmup_steps = 50_000
 # n_warmup_steps = 100
-n_total_steps = 50000000
+n_total_steps = 50_000_000
 n_total_episodes = 600
 n_stack_frames = 4
 
-result_dir = "results/{env_id}/{now}"
+result_dir = "results/vanilla_dqn/{env_id}/{now}"
 
 
 [replay]
-# limit = 1000000  # requires approximately 62.5 GB memory (with `n_action_repeat = 4`)
-# limit = 800000  # requires approximately 50 GB memory (with `n_action_repeat = 4`)
-limit = 400000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
+# limit = 1_000_000  # requires approximately 62.5 GB memory (with `n_action_repeat = 4`)
+# limit = 800_000  # requires approximately 50 GB memory (with `n_action_repeat = 4`)
+limit = 400_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
 
 [policy]
 

@@ -17,13 +17,11 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.argument('config_path', type=click.Path(exists=True))
 @click.argument('env_id')
-@click.argument('agent_name')
 @click.option('--device', default=0, show_default=True, help='device id. -1: CPU, >=0: GPU (s).')
-def train(config_path, env_id, agent_name, device):
+def train(config_path, env_id, device):
     """
     CONFIG_PATH: config filepath, e.g.: configs/vanilla_dqn.toml\n
     ENV_ID: OpenAI Gym environment id, e.g.: PongNoFrameskip-v4\n
-    AGENT_NAME: Agent class name, e.g.: VanillaDQNAgent
     """
     config = toml.load(config_path)
 
@@ -41,6 +39,7 @@ def train(config_path, env_id, agent_name, device):
     logging.config.dictConfig(logging_config)
 
     try:
+        agent_name = config['agent_name']
         if agent_name == 'VanillaDQNAgent':
             agent = algorithms.vanilla_dqn.VanillaDQNAgent()
         elif agent_name == 'AsyncDQNAgent':

@@ -16,3 +16,7 @@ see: [Installation Guide — CuPy 4.3.0 documentation](http://docs-cupy.chainer.
 - If you use cupy-recommended environment (https://docs-cupy.chainer.org/en/stable/install.html#recommended-environments),
   cuDNN and NCCL libraries are included in `cupy` wheels.
   - `$ pip install cupy-cuda92`
+
+# Redis
+- Run your server with `redis-server --save "" --appendonly no`.
+  - see https://stackoverflow.com/a/41238678/2500650
