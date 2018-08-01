@@ -84,7 +84,9 @@ class SharedReplay:
         self._shape = self.AtariExperience._shape
         self._len = 0
 
-    def push(self, experience, memory, head):
+    def _push(self, experience, memory, head):
+        """This private method does not ensure concurrent update.
+        The caller of this method should ensure that."""
         state, action, reward, next_state, done = experience
         data = (
             base64.b64encode(np.ascontiguousarray(state)),
@@ -93,30 +95,30 @@ class SharedReplay:
             base64.b64encode(np.ascontiguousarray(next_state)),
             bool(done), )
         memory[head.value] = data
-        with head.get_lock():
-            val = head.value + 1
-            if self._len < self.limit:
-                self._len = val
-                if self.is_filled:
-                    logger.info('Memory is filled.')
-            head.value = val % self.limit
+        if self._len < self.limit:
+            self._len = head.value + 1
+            if self.is_filled:
+                logger.info('Memory is filled.')
+        head.value = (head.value + 1) % self.limit
 
-    def mpush(self, experiences, memory, head):
-        for exp in experiences:
-            self.push(exp, memory, head)
+    def mpush(self, experiences, lock, memory, head):
+        with lock:
+            for exp in experiences:
+                self._push(exp, memory, head)
 
-    def sample(self, size, memory, head):
-        high = self.limit if self.is_filled else head.value
-        idxs = np.random.randint(0, high=high, size=size)
-        data = [
-            (
-                np.frombuffer(base64.decodebytes(memory[idx].state), dtype=self._dtype).reshape(self._shape),
-                memory[idx].action,
-                memory[idx].reward,
-                np.frombuffer(base64.decodebytes(memory[idx].next_state), dtype=self._dtype).reshape(self._shape),
-                memory[idx].done,
-            ) for idx in idxs]
-        return data
+    def sample(self, size, lock, memory, head):
+        with lock:
+            high = self.limit if self.is_filled else head.value
+            idxs = np.random.randint(0, high=high, size=size)
+            data = [
+                (
+                    np.frombuffer(base64.decodebytes(memory[idx].state), dtype=self._dtype).reshape(self._shape),
+                    memory[idx].action,
+                    memory[idx].reward,
+                    np.frombuffer(base64.decodebytes(memory[idx].next_state), dtype=self._dtype).reshape(self._shape),
+                    memory[idx].done,
+                ) for idx in idxs]
+            return data
 
     def __len__(self):
         return self._len

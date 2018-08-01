@@ -25,7 +25,8 @@ def visualize(csv_path, out_path, window):
 def _visualize(csv_path, out_path, window=10):
     out_dir = os.path.dirname(out_path)
     os.makedirs(out_dir, exist_ok=True)
-    df = pd.read_csv(csv_path, index_col='total_episodes')
+    df = pd.read_csv(csv_path)
+    df.set_index(df.columns[0], inplace=True)
     smoothed_df = df.rolling(window=window, center=True).mean()
     axes = smoothed_df.plot(subplots=True, sharex=True, grid=True, figsize=(8, 12))
     fig = axes[0].figure

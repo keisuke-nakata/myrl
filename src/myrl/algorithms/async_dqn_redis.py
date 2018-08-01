@@ -105,7 +105,6 @@ class AsyncDQNAgent:
 
         while actor.total_steps < self.config['n_total_steps'] and actor.total_episodes < self.config['n_total_episodes']:
             logger.debug(f'episode {actor.total_episodes}, step {actor.total_steps}')
-            # actor
             experience, done = actor.act()
             replay.push(experience)
 
@@ -145,13 +144,6 @@ class AsyncDQNAgent:
 
     def train(self):
         # warmup
-        # n_cpus = len(os.sched_getaffinity(0)) // 2
-        # warmup_procs = [multiprocessing.Process(target=self._warmup, args=(self.config['n_warmup_steps'] // n_cpus, )) for _ in range(n_cpus)]
-        # logger.info(f'warming up in {n_cpus} processes.')
-        # for proc in warmup_procs:
-        #     proc.start()
-        # for proc in warmup_procs:
-        #     proc.join()
         warmup_proc = multiprocessing.Process(target=self._warmup, args=(self.config['n_warmup_steps'], ))
         warmup_proc.start()
         warmup_proc.join()

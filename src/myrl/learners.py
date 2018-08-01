@@ -16,16 +16,13 @@ CPU_ID = -1
 
 
 class BaseLearner:
-    def __init__(self, network, optimizer, gamma=0.99, logging_freq=2000):
+    def __init__(self, network, optimizer, gamma=0.99):
         self.network = network
         self.optimizer = optimizer
         self.gamma = gamma
-        self.logging_freq = logging_freq
 
         self.optimizer.setup(self.network)
 
-        self.losses = []
-        self.td_errors = []
         self.total_updates = 0
         self.timer = Timer()
         self.timer.start()
@@ -33,19 +30,8 @@ class BaseLearner:
     def learn(self, experiences):
         batch = self._experiences2batch(experiences)
         loss, td_error = self._learn(batch)
-        self.losses.append(loss)
-        self.td_errors.append(td_error)
 
         self.total_updates += 1
-        if self.logging_freq != 0 and self.total_updates % self.logging_freq == 0:
-            self.timer.lap()
-            n = len(self.losses)
-            logger.info(
-                f'finished {n} updates with avg loss {sum(self.losses) / n:.5f}, td_error {sum(self.td_errors) / n:.5f} in {self.timer.laptime_str} '
-                f'({n / self.timer.laptime:.2f} batches (updates) per seconds) '
-                f'(total_updates {self.total_updates:,}, total_time {self.timer.elapsed_str})')
-            self.losses = []
-            self.td_errors = []
         return loss, td_error
 
     def dump_parameters(self, path):

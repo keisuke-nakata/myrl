@@ -1,7 +1,8 @@
 import logging
 import os
 import multiprocessing
-from multiprocessing.sharedctypes import Value, Array
+from multiprocessing.sharedctypes import RawValue, RawArray
+import csv
 
 from chainer import optimizers
 
@@ -37,11 +38,11 @@ class AsyncDQNAgent:
         self.replay = SharedReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
 
     @report_error(logger)
-    def _warmup(self, n_warmup_steps, memory, head):
+    def _warmup(self, n_warmup_steps, memory_lock, memory, head):
         warmup_actor = self._build_actor(self.env_id)
         for exps in warmup_actor.warmup_act(n_warmup_steps):
             if len(exps) > 0:
-                self.replay.mpush(exps, memory, head)
+                self.replay.mpush(exps, memory_lock, memory, head)
 
     def _build_actor(self, env_id, greedy=False):
         if greedy:
@@ -86,33 +87,35 @@ class AsyncDQNAgent:
             network=learner_network,
             optimizer=optimizer,
             gamma=self.config['learner']['gamma'],
-            target_network_update_freq=self.config['learner']['target_network_update_freq'],
-            logging_freq=self.config['learner']['logging_freq'])
+            target_network_update_freq=self.config['learner']['target_network_update_freq'], )
         logger.info(f'built a learner.')
         return learner
 
     @report_error(logger)
-    def _act(self, lock, memory, head):
+    def _act(self, memory_lock, network_dump_lock, memory, head):
         actor = self._build_actor(self.env_id, greedy=False)
         greedy_actor = self._build_actor(self.env_id, greedy=True)
         load_freq = self.config['actor']['load_freq']
         next_load_step = 0
 
+        experience_buffer = []
+
         while actor.total_steps < self.config['n_total_steps'] and actor.total_episodes < self.config['n_total_episodes']:
             logger.debug(f'episode {actor.total_episodes}, step {actor.total_steps}')
-            # actor
             experience, done = actor.act()
-            self.replay.push(experience, memory, head)
+            experience_buffer.append(experience)
 
             if done:
+                self.replay.mpush(experience_buffer, memory_lock, memory, head)
                 logger.info(f'Memory length at episode {actor.total_episodes}: {len(self.replay)}')
+                experience_buffer = []
 
             # dump episode and greedy actor's play
             if done and actor.total_episodes % self.render_episode_freq == 0:
                 actor.dump_episode()
 
                 logger.info('greedy actor is playing...')
-                with lock:
+                with network_dump_lock:
                     greedy_actor.load_parameters(self.network_dump_path)
                 greedy_actor.total_episodes = actor.total_episodes - 1
                 greedy_actor.total_steps = actor.total_steps
@@ -120,42 +123,65 @@ class AsyncDQNAgent:
                 greedy_actor.dump_episode()
                 logger.info('greedy actor is playing... done.')
             if load_freq != 0 and actor.total_steps >= next_load_step:
-                with lock:
+                with network_dump_lock:
                     actor.load_parameters(self.network_dump_path)
                 next_load_step += load_freq
 
     @report_error(logger)
-    def _learn(self, lock, memory, head):
+    def _learn(self, memory_lock, network_dump_lock, memory, head):
         learner = self._build_learner()
-        dump_freq = self.config['learner']['dump_freq']
-        with lock:
+        logging_freq = self.config['learner']['logging_freq']
+        network_dump_freq = self.config['learner']['network_dump_freq']
+        result_path = os.path.join(self.config['result_dir'], 'learner_history.csv')
+        with open(result_path, 'w') as f:
+            writer = csv.writer(f)
+            writer.writerow(['update', 'loss', 'td_error'])
+        with network_dump_lock:
             learner.dump_parameters(self.network_dump_path)  # initial parameter
 
+        updates = []
+        losses = []
+        td_errors = []
         while True:
-            experiences = self.replay.sample(size=self.config['learner']['batch_size'], memory=memory, head=head)
-            learner.learn(experiences)
-            if dump_freq != 0 and learner.total_updates % dump_freq == 0:
-                with lock:
+            experiences = self.replay.sample(size=self.config['learner']['batch_size'], lock=memory_lock, memory=memory, head=head)
+            loss, td_error = learner.learn(experiences)
+            updates.append(learner.total_updates)
+            losses.append(loss)
+            td_errors.append(td_error)
+            if logging_freq != 0 and learner.total_updates % logging_freq == 0:
+                with open(result_path, 'a') as f:
+                    writer = csv.writer(f)
+                    writer.writerowws(list(zip(*[updates, losses, td_errors])))
+                learner.timer.lap()
+                n = len(losses)
+                logger.info(
+                    f'finished {n} updates with avg loss {sum(losses) / n:.5f}, td_error {sum(td_errors) / n:.5f} in {learner.timer.laptime_str} '
+                    f'({n / learner.timer.laptime:.2f} batches (updates) per seconds) '
+                    f'(total_updates {learner.total_updates:,}, total_time {learner.timer.elapsed_str})')
+                updates = []
+                losses = []
+                td_errors = []
+            if network_dump_freq != 0 and learner.total_updates % network_dump_freq == 0:
+                with network_dump_lock:
                     learner.dump_parameters(self.network_dump_path)
 
     def train(self):
-        logger.info('Constructing a shared memory...')
-        memory = Array(SharedReplay.AtariExperience, self.replay.limit, lock=True)
-        head = Value('i', 0, lock=True)
-        logger.info('Constructing a shared memory... done.')
+        logger.info('Constructing shared memory...')
+        memory = RawArray(SharedReplay.AtariExperience, self.replay.limit)
+        head = RawValue('i', 0)
+        logger.info('Constructing shared memory... done.')
+        memory_lock = multiprocessing.Lock()
 
-        warmup_proc = multiprocessing.Process(target=self._warmup, args=(self.config['n_warmup_steps'], memory, head))
+        warmup_proc = multiprocessing.Process(target=self._warmup, args=(self.config['n_warmup_steps'], memory_lock, memory, head))
         warmup_proc.start()
         warmup_proc.join()
 
-        lock = multiprocessing.Lock()
-        proc_learner = multiprocessing.Process(target=self._learn, args=(lock, memory, head))
-        proc_actor = multiprocessing.Process(target=self._act, args=(lock, memory, head))
+        network_dump_lock = multiprocessing.Lock()
+        proc_learner = multiprocessing.Process(target=self._learn, args=(memory_lock, network_dump_lock, memory, head))
+        proc_actor = multiprocessing.Process(target=self._act, args=(memory_lock, network_dump_lock, memory, head))
 
         proc_learner.start()
         proc_actor.start()
 
         proc_actor.join()
         proc_learner.terminate()
-
-        # self._learn(lock, memory, head)
