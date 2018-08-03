@@ -94,13 +94,13 @@ load average が 5 近い。actor を CPU にしたら、さらに CPU 足りな
 actor の memory push を step ごとではなく episode ごとにした  
 また、Array/Value の代わりに RawArray/RawValue を利用することにした
 ※CPUのコア数を倍に増やしているので注意 (メモリも若干増えてる)  ← CPU の数は5個がちょうどよさそう
-#### setting 1 (____)
+#### setting 1 (20180802_065234)
 - actor: GPU
 - greedy actor: GPU
 - learner: GPU
 - warmup = 50_000
 - fps (warmup) = 369.88 fps くらい
-- limit = 300_000 (disk usage = 88% (もともと 55% くらいは使っているので、33% (=5GB) くらいの消費量))
+- limit = 300_000 (disk usage = 88% (もともと 55% くらいは使っているので、33% (=5GB) くらいの消費量)。memory usage は 2GB くらい (謎))
 - Memory length at episode ____: ____
 - batch_size = 32
 
@@ -108,19 +108,120 @@ actor の memory push を step ごとではなく episode ごとにした
 - actor fps = 319.87 fps くらい
 
 load average は 4 くらい
+GPU 使用率は 32% くらい
 
 
-## custom（vCPU x 5、メモリ 30 GB）, 1 x NVIDIA Tesla K80 (preemptive)
-リプレイのためには disk も必要そう (謎) なので、disk も 15GB -> 40GB に増やす
+## n1-standard-8（vCPU x 8、メモリ 30 GB）, 1 x NVIDIA Tesla K80 (preemptive)
+learner の sample を prefetch かけるようにした (n_prefetches = 2).
+CPU の使用率的には, 5 コアくらいで十分そうな感じ
+#### setting 1 (____) ※一旦コードが動くことを確認したあとすぐにインスタンスを潰したので、結果はなし
+- actor: GPU
+- greedy actor: GPU
+- learner: GPU
+- warmup = 5_000
+- fps (warmup) = 369.88 fps くらい
+- limit = 300_000 (disk usage = 88% (もともと 55% くらいは使っているので、33% (=5GB) くらいの消費量)。memory usage は 2GB くらい (謎))
+- Memory length at episode ____: ____
+- batch_size = 32
+
+- batches per seconds = 55-72 くらい。けっこうブレる
+- actor fps = 271.49 - 314.04 fps くらい (ちょっと遅くなった？ 一番速いときは同じくらいの速度なので、sampler 側の prefetch でロックをかけているせいか？)
+
+load average は 3.2 くらい
+GPU 使用率は 40% くらいまであがった
+
+
+## custom（vCPU x 6、メモリ 16 GB）, 1 x NVIDIA Tesla K80 (preemptive)
+CPU の数を 6個にする (偶数個しか選べない)
+learner の sample を prefetch の数を 2 から 3 に増やす
+リプレイのためには disk も必要そう (謎) なので、disk も 15GB -> 40GB に増やす (メモリはそんなにいらなそう？RawArray の実装どうなってんだ？memory-mapped file なのか？)
+#### setting 1 (20180802_220440)
+- actor: GPU
+- greedy actor: GPU
+- learner: GPU
+- warmup = 50_000
+- fps (warmup) = 380 fps くらい
+- limit = 400_000 (標準ディスクではなく SSD にすると、allocate が全く終わらない。謎 → SSD のせいではなく、メモリが足りずに詰んでいただけっぽい)
+- Memory length at episode ____: ____
+- batch_size = 32
+
+- batches per seconds = 58.72 くらい。けっこうブレる
+- actor fps = 258.25 fps くらい (明らか遅い。prefetch が大きすぎたか。)
+- load average : 3.5 くらい
+- GPU 使用率 : 35-40 % くらい
+- disk usage = 15GB (もともと 7.4GB は使っているので、 7.6GB くらいの消費量)
+- memory usage = 最初の方: 1GB くらい  warmup後：1.8GBくらい
+
+
+## custom（vCPU x 6、メモリ 16 GB）, 1 x NVIDIA Tesla K80 (preemptive)
+メモリが全然いらなさそうなので、12GB まで減らす・・・と思ったけど、値段が全然変わらないので 16GB キープ (3$/monthしか安くならない)
+learner の sample を prefetch の数を 1 に減らす
+#### setting 1 (____) ※一旦コードが動くことを確認したあとすぐにインスタンスを潰したので、結果はなし
+- actor: GPU
+- greedy actor: GPU
+- learner: GPU
+- warmup = 50_000
+- limit = 600_000
+- Memory length at episode ____: ____
+- batch_size = 32
+
+- fps (warmup) = 375.88 fps くらい
+- batches per seconds = 50-55 くらい。けっこうブレる
+- actor fps = 222.27 fps くらい (n_prefetches = 1 でも逆に効率が悪いのか？また =2 で実験する必要がある)
+- load average : 3.2-3.5 くらい
+- GPU 使用率 : 33-45 % くらい
+- disk usage = 18 GB (もともと 7.4GB は使っているので、 10.6 GB くらいの消費量。 memory usage と同じくらいだ！)
+- memory usage = 68.2% (=10.7GB)
+
+
+## custom（vCPU x 6、メモリ 16 GB）, 1 x NVIDIA Tesla K80 (preemptive)
+learner の sample を prefetch の数を 2 に戻す
 #### setting 1 (____)
 - actor: GPU
 - greedy actor: GPU
 - learner: GPU
 - warmup = 50_000
-- fps (warmup) = ____ fps くらい
-- limit = ____ (disk usage = ____% (もともと 55% くらいは使っているので、33% (=5GB) くらいの消費量))
+- limit = 600_000
 - Memory length at episode ____: ____
 - batch_size = 32
 
-- batches per seconds = ____くらい
-- actor fps = ____ fps くらい
+- fps (warmup) = 385.05 fps くらい
+- batches per seconds = 45 - 60 くらい。かなりブレる
+- actor fps = 254.09 fps くらい
+- load average : 4.2 - 4.4 くらい
+- GPU 使用率 : 35 - 45 % くらい
+- disk usage = 18 GB (もともと 7.4GB は使っているので、 10.6 GB くらいの消費量。 ちゃんと memory usage と同じくらいになっている)
+- memory usage = 68.2% (=10.7GB)
+
+
+# BreakoutNoFrameskip-v4
+- 1 episode あたりの step 数： 700 - 1,500 ほど (うまくいくほど伸びる)
+- 1 episode あたりのダンプサイズ：____ MB くらい
+  - なおす 50_000_000 steps ~ 50_000 episodes なので、 全エピソードをダンプすると、greedy ぶんもあわせて 2 * ____ MB * 50_000 = 1,600 GB
+  - なおす 100 episode ごとにダンプで、 16 GB 必要となる
+
+
+## custom（vCPU x 6、メモリ 16 GB）, 1 x NVIDIA Tesla K80 (preemptive), standard disk 40GB
+#### setting 1 (____)
+- actor: GPU
+- greedy actor: GPU
+- learner: GPU
+- warmup = 50_000
+- limit = 600_000
+- Memory length at episode ____: ____
+- batch_size = 32
+- learner prefetch = 2
+
+- fps (warmup) = 385.62 fps くらい
+- batches per seconds = 45 - 60 くらい。かなりブレる
+- actor fps = 254.09 fps くらい
+- load average : 2.6 - 2.8 くらい (Alien よりも結構余裕がある。なぜ？)
+- GPU 使用率 : 35 - 45 % くらい
+- disk usage = 18 GB (もともと 7.4GB は使っているので、 10.6 GB くらいの消費量。 ちゃんと memory usage と同じくらいになっている)
+- memory usage = 68.2% (=10.7GB)
+
+
+
+やること
+- SSD
+- CPU もっと余裕もたせると actor 速くなるのでは?

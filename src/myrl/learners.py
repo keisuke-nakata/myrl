@@ -56,9 +56,7 @@ class FittedQLearner(BaseLearner):
         self.target_network_update_freq = kwargs.pop('target_network_update_freq', 10_000)
         self.target_network_update_soft = kwargs.pop('target_network_update_soft', None)
         super().__init__(*args, **kwargs)
-        self.target_network = self.network.copy(mode='copy')
-        # TODO: target_network.to_gpu()? しなくても、たぶん勝手に同じ device に存在する状態でコピーされるっぽい？要確認
-        # network と target_network は同じデバイスにいないと非常にめんどくさいかも (データのコピーが行ったり来たりするので)
+        self.target_network = self.network.copy(mode='copy')  # this copies `_device_id` as well
 
     def _experiences2batch(self, experiences):
         if self.total_updates % self.target_network_update_freq == 0:

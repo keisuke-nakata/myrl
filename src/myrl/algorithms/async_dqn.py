@@ -129,6 +129,9 @@ class AsyncDQNAgent:
 
     @report_error(logger)
     def _learn(self, memory_lock, network_dump_lock, memory, head):
+        batch_size = self.config['learner']['batch_size']
+        self.replay.start_prefetch(batch_size, memory_lock, memory, head, n_prefetches=self.config['learner']['n_prefetches'])
+
         learner = self._build_learner()
         logging_freq = self.config['learner']['logging_freq']
         network_dump_freq = self.config['learner']['network_dump_freq']
@@ -143,7 +146,8 @@ class AsyncDQNAgent:
         losses = []
         td_errors = []
         while True:
-            experiences = self.replay.sample(size=self.config['learner']['batch_size'], lock=memory_lock, memory=memory, head=head)
+            # experiences = self.replay.sample(size=batch_size, lock=memory_lock, memory=memory, head=head)
+            experiences = self.replay.sample()
             loss, td_error = learner.learn(experiences)
             updates.append(learner.total_updates)
             losses.append(loss)
@@ -151,12 +155,12 @@ class AsyncDQNAgent:
             if logging_freq != 0 and learner.total_updates % logging_freq == 0:
                 with open(result_path, 'a') as f:
                     writer = csv.writer(f)
-                    writer.writerowws(list(zip(*[updates, losses, td_errors])))
+                    writer.writerows(list(zip(*[updates, losses, td_errors])))
                 learner.timer.lap()
                 n = len(losses)
                 logger.info(
                     f'finished {n} updates with avg loss {sum(losses) / n:.5f}, td_error {sum(td_errors) / n:.5f} in {learner.timer.laptime_str} '
-                    f'({n / learner.timer.laptime:.2f} batches (updates) per seconds) '
+                    f'({n / learner.timer.laptime:.2f} batches per seconds) '
                     f'(total_updates {learner.total_updates:,}, total_time {learner.timer.elapsed_str})')
                 updates = []
                 losses = []

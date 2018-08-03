@@ -3,6 +3,7 @@ import pickle
 import logging
 import ctypes as C
 import base64
+import multiprocessing
 
 import redis
 import numpy as np
@@ -84,6 +85,8 @@ class SharedReplay:
         self._shape = self.AtariExperience._shape
         self._len = 0
 
+        self._queue = None
+
     def _push(self, experience, memory, head):
         """This private method does not ensure concurrent update.
         The caller of this method should ensure that."""
@@ -106,19 +109,30 @@ class SharedReplay:
             for exp in experiences:
                 self._push(exp, memory, head)
 
-    def sample(self, size, lock, memory, head):
-        with lock:
-            high = self.limit if self.is_filled else head.value
-            idxs = np.random.randint(0, high=high, size=size)
-            data = [
-                (
-                    np.frombuffer(base64.decodebytes(memory[idx].state), dtype=self._dtype).reshape(self._shape),
-                    memory[idx].action,
-                    memory[idx].reward,
-                    np.frombuffer(base64.decodebytes(memory[idx].next_state), dtype=self._dtype).reshape(self._shape),
-                    memory[idx].done,
-                ) for idx in idxs]
-            return data
+    def start_prefetch(self, size, lock, memory, head, n_prefetches=2):
+        self._queue = multiprocessing.Queue(n_prefetches)
+        self._prefetch_process = multiprocessing.Process(target=self._prefetch, args=(size, lock, memory, head))
+        self._prefetch_process.start()
+
+    def _prefetch(self, size, lock, memory, head):
+        while True:
+            with lock:
+                high = self.limit if self.is_filled else head.value
+                idxs = np.random.randint(0, high=high, size=size)
+                data = [
+                    (
+                        np.frombuffer(base64.decodebytes(memory[idx].state), dtype=self._dtype).reshape(self._shape),
+                        memory[idx].action,
+                        memory[idx].reward,
+                        np.frombuffer(base64.decodebytes(memory[idx].next_state), dtype=self._dtype).reshape(self._shape),
+                        memory[idx].done,
+                    ) for idx in idxs]
+                self._queue.put(data)
+
+    def sample(self):
+        if self._queue is None:
+            raise ValueError('Prefetch process has not started. Call `start_prefetch()` before `sample()`.')
+        return self._queue.get()
 
     def __len__(self):
         return self._len
