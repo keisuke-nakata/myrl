@@ -1,21 +1,17 @@
 agent_name = "VanillaDQNAgent"
 n_warmup_steps = 50_000
-# n_warmup_steps = 5_000
 # n_warmup_steps = 100
 n_total_steps = 50_000_000
-n_total_episodes = 1_000_000_000  # infinite...
+n_total_episodes = 600
 n_stack_frames = 4
 
 result_dir = "results/vanilla_dqn/{env_id}/{now}"
 
 
 [replay]
-limit = 1_000_000  # requires approximately 62.5 GB memory (with `n_action_repeat = 4`)
+# limit = 1_000_000  # requires approximately 62.5 GB memory (with `n_action_repeat = 4`)
 # limit = 800_000  # requires approximately 50 GB memory (with `n_action_repeat = 4`)
-# limit = 600_000  # requires approximately 50 GB memory (with `n_action_repeat = 4`)
-# limit = 400_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
-# limit = 300_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
-# limit = 10_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
+limit = 400_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
 
 [policy]
 
@@ -39,16 +35,15 @@ eps = 0.01
 gamma = 0.99
 batch_size = 32
 target_network_update_freq = 10_000
-# target_network_update_freq = 1_000
 # target_network_update_soft = 0.01
-logging_freq = 1000
-# logging_freq = 500
-# logging_freq = 100
+logging_freq = 0
+dump_freq = 0
 
 
 [actor]
 n_action_repeat = 4
 n_random_actions_at_reset = [0, 30]  # will be converted to tuple
+load_freq = 0
 
 
 [history]

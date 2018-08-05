@@ -1,0 +1,44 @@
+https://github.com/deepmind/dqn
+
+https://github.com/deepmind/dqn/blob/master/run_gpu
+state_dim=7056 (=84*84)
+hist_len=4
+replay_memory=1,000,000
+bufferSize=512
+eps_endt=replay_memory
+steps=50,000,000
+
+https://github.com/deepmind/dqn/blob/master/dqn/train_agent.lua
+
+
+https://github.com/deepmind/dqn/blob/master/dqn/TransitionTable.lua
+self.stateDim = args.stateDim      # =state_dim
+self.histLen = args.histLen        # =hist_len
+self.maxSize = args.maxSize        # =replay_memory
+self.bufferSize = args.bufferSize  # =bufferSize
+
+self.s = torch.ByteTensor(self.maxSize, self.stateDim)
+
+sample (buffer が足りなくなったら fill_buffer を呼ぶ。その後、buffer から順に batch_size ぶんだけデータを取得)
+v
+fill_buffer (bufferSize ぶんだけ sample_one を呼び、その結果を buffer に保存、フレームは 255 で割り、GPU に転送)
+v
+sample_one (ランダムな index をひとつ発生させて、get を呼ぶ)
+v
+get
+v
+concatFrames (index を与えられて、self.s 等から 4 つぶんの frame をコンカチして返す)
+
+
+結論：
+リプレイとして持っているのは、state ではなく frame として 1,000,000 個
+epsilon のアニーリングも、replay サイズと同じだけになっているので、1,000,000 step で最小になるようにしている
+step回数は、内部的におこなっている action_repeat は含まないで数えている (単純に、「何回 action を環境に対して入力したか」で数えている)
+
+
+https://github.com/deepmind/alewrap/blob/master/alewrap/GameEnvironment.lua
+step() 関数の中で、actrep (繰り返し数) だけ reward を足し合わせる処理をやってしまっている
+しかも、使っているのは繰り返し (4) フレームの最後のフレームだけ！
+(DQN はゲームを4倍速でプレイしている、ということだった。
+正解：1 state = もと (人間プレイの) の 16 frame ぶんに相当
+間違い： 1 state = もとの 4 frame ぶんに相当

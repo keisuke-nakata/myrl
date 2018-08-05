@@ -79,7 +79,11 @@ class FittedQLearner(BaseLearner):
     def _learn(self, batch):
         batch_x, batch_y, batch_action = batch
         batch_q = F.select_item(self.network(batch_x), batch_action)
-        loss = F.mean_squared_error(batch_q, batch_y)
+        assert len(batch_q.shape) == 1
+        assert len(batch_y.shape) == 1
+        assert batch_q.shape[0] == batch_y.shape[0]
+        # loss = F.mean_squared_error(batch_q, batch_y)
+        loss = F.mean(F.huber_loss(batch_q, batch_y, delta=1.0, reduce='no'))
 
         self.network.cleargrads()
         loss.backward()
