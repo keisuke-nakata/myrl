@@ -21,25 +21,25 @@ class MaxWithPrevious:
 
 
 class GrayScale:
-    def __call__(self, observation, last_observation):
+    def __call__(self, observation):
         ret = rgb2gray(observation)  # will be ((210, 160), dtype=np.float64)
         return ret
 
 
 class Rescale:
-    def __call__(self, observation, last_observation):
+    def __call__(self, observation):
         ret = resize(observation, output_shape=(110, 84, 1), mode='constant', anti_aliasing=True)  # 210x160 -> 110x84x1
         return ret[13:-13, :, :]  # crop center (84, 84, 1)
 
 
 class Float32:
-    def __call__(self, observation, last_observation):
+    def __call__(self, observation):
         ret = np.asarray(observation, dtype=np.float32)
         return ret
 
 
 class UInt8:
-    def __call__(self, observation, last_observation):
+    def __call__(self, observation):
         ret = (observation * 255).astype(np.uint8)
         return ret
 
@@ -55,8 +55,8 @@ class AtariPreprocessor:
 
     def __call__(self, observation, last_observation):
         observation = self.max_with_previous(observation, last_observation)
-        observation = self.grayscale(observation, last_observation)
-        observation = self.rescale(observation, last_observation)
-        # observation = self.float32(observation, last_observation)
-        observation = self.uint8(observation, last_observation)
+        observation = self.grayscale(observation)
+        observation = self.rescale(observation)
+        # observation = self.float32(observation)
+        observation = self.uint8(observation)
         return observation

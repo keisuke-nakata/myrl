@@ -17,22 +17,13 @@ limit = 1_000_000  # requires approximately 62.5 GB memory (with `n_action_repea
 # limit = 300_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
 # limit = 10_000  # requires approximately 25 GB memory (with `n_action_repeat = 4`)
 
-[policy]
+[explorer]
 
-[policy.params]
+[explorer.params]
 initial_epsilon = 1.0
 final_epsilon = 0.1
 # final_exploration_step = 1_000_000
 final_exploration_step = 4_000_000
-
-
-[optimizer]
-optimizer = "RMSprop"
-
-[optimizer.params]
-lr = 0.00025
-alpha = 0.95
-eps = 0.01
 
 
 [learner]
@@ -44,6 +35,15 @@ target_network_update_freq = 10_000
 logging_freq = 1000
 # logging_freq = 500
 # logging_freq = 100
+
+[optimizer]
+class = "RMSprop"
+
+[learner.optimizer.params]
+lr = 0.00025
+alpha = 0.95
+eps = 0.01
+
 
 
 [actor]

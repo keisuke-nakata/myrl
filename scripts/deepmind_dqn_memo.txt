@@ -25,7 +25,7 @@ fill_buffer (bufferSize ぶんだけ sample_one を呼び、その結果を buff
 v
 sample_one (ランダムな index をひとつ発生させて、get を呼ぶ)
 v
-get
+get (s2 = self:concatFrames(index+1) で呼んでいる ＝ state として利用する frame は重複している)
 v
 concatFrames (index を与えられて、self.s 等から 4 つぶんの frame をコンカチして返す)
 
@@ -36,6 +36,8 @@ concatFrames (index を与えられて、self.s 等から 4 つぶんの frame �
 epsilon のアニーリングは、replay サイズと同じだけになっているので、1,000,000 step でアニーリングが終わるようになっている
 step回数は、内部的におこなっている action_repeat は含まないで数えている (単純に、「何回 action を環境に対して入力したか」で数えている)
 
+action_repeat と frameskip はおなじものを指している。
+
 
 https://github.com/deepmind/alewrap/blob/master/alewrap/GameEnvironment.lua
 step() 関数の中で、actrep (繰り返し数) だけ reward を足し合わせる処理をやってしまっている
@@ -43,3 +45,43 @@ step() 関数の中で、actrep (繰り返し数) だけ reward を足し合わ�
 (DQN はゲームを4倍速でプレイしている、ということだった。
 正解：1 state = もと (人間プレイの) の 16 frame ぶんに相当
 間違い： 1 state = もとの 4 frame ぶんに相当
+
+https://github.com/deepmind/alewrap/blob/master/alewrap/GameEnvironment.lua#L146
+ただし、random start に関しては、もともとのゲームでのステップ数で数える。
+(0 - 30 step のあいだの乱数を発生させて、そのぶんだけ action 0 を取り続ける)
+
+
+
+リプレイへの追加、行動の選択、ネットワークの更新、を一度におこなう関数
+local action_index = agent:perceive(reward, screen, terminal)  # https://github.com/deepmind/dqn/blob/master/dqn/train_agent.lua#L83, https://github.com/deepmind/dqn/blob/master/dqn/NeuralQLearner.lua#L300
+↓
+リプレイへの追加：self.s, self.a, self.r, self.t (termのこと) に経験を書き込む。特に変なことはしていない。
+このとき書き込まれる経験は、一つ前のステップのもの。なぜなら、perceive() の中で一番最初に呼ばれるのがこいつだから
+self.transitions:add(self.lastState, self.lastAction, reward, self.lastTerminal, priority)  # https://github.com/deepmind/dqn/blob/master/dqn/NeuralQLearner.lua#L321, https://github.com/deepmind/dqn/blob/master/dqn/TransitionTable.lua#L272
+↓
+行動の選択：渡される curState は、curState= self.transitions:get_recent() で取ってきたもの。その前に add_recent_state() をしているので、結局、今取りたい行動のもととなる状態を得ている
+actionIndex = self:eGreedy(curState, testing_ep)  # https://github.com/deepmind/dqn/blob/master/dqn/NeuralQLearner.lua#L335
+↓
+ネットワークの更新：n_replay の回数だけ学習しているように見えるが、n_replay = 1 なので気にしなくて良い。
+なお、update_freq = 4 であることに注意。つまり、行動選択4回ごとに1回しか学習してない！！
+self:qLearnMinibatch()  # https://github.com/deepmind/dqn/blob/master/dqn/NeuralQLearner.lua#L344
+
+↓
+環境に対して、行動を入力。このとき、game_env:step() は、内部で4回行動を繰り返してその報酬和と最後のフレームを返すことに注意。
+(4回の根拠：https://github.com/deepmind/dqn/blob/master/run_gpu#L15)
+screen, reward, terminal = game_env:step(game_actions[action_index], true)  # https://github.com/deepmind/dqn/blob/master/dqn/train_agent.lua#L87
+
+
+"state" の定義がどうされているのかを調べるために、ネットワークの更新の関数 qLearnMinibatch() をもう少し詳しく見る：
+self:qLearnMinibatch()  # https://github.com/deepmind/dqn/blob/master/dqn/NeuralQLearner.lua#L240
+重要なのは、次の部分 (その他の処理は特に変なことはしていない)：
+local s, a, r, s2, term = self.transitions:sample(self.minibatch_size)  # https://github.com/deepmind/dqn/blob/master/dqn/NeuralQLearner.lua#L245, https://github.com/deepmind/dqn/blob/master/dqn/TransitionTable.lua#L147
+↓
+諸々処理あって、結局、1 sample ぶんの state を生成するのは concatFrames の中でやっている：
+local s = self:concatFrames(index)
+local s2 = self:concatFrames(index+1)
+https://github.com/deepmind/dqn/blob/master/dqn/TransitionTable.lua#L171
+
+
+※ concatFrames() に出てくる、histIndices は identity 関数だと思って良い (https://github.com/deepmind/dqn/blob/master/dqn/TransitionTable.lua#L33)。
+mode が色々あるようだが、linear (＝なにもしない) しか使われていない。
