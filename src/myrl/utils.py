@@ -1,80 +1,91 @@
 import time
 from functools import wraps
-import traceback
 import csv
+
+import numpy as np
 
 
 class Recorder:
-    def __init__(self, result_path, header, template):
-        self.result_path = result_path
-        self.header = header
-        self.template = template
+    stepwise_header = None
+    episodewise_header = None
+    template = None
+
+    def __init__(self, episodewise_csv_path):
+        self.episodewise_csv_path = episodewise_csv_path
 
     def start(self):
-        self.global_timer = Timer().start()
-        self._write_header()
+        self.timer = Timer()
+        self._write_episodewise_header()
 
-    def _write_header(self):
-        with open(self.result_path, 'w') as f:
+    def _write_episodewise_header(self):
+        with open(self.episodewise_csv_path, 'w') as f:
             writer = csv.writer(f)
-            writer.writerow(self.header)
+            writer.writerow(self.episodewise_header)
 
-    def begin_episode(self, episode):
-        self.episode_timer = Timer().start()
-        self.episode = episode
-        self.episode_record = {col: [] for col in self.header}
+    def begin_episode(self):
+        self.timer.lap()
+        self.episode_record = {col: [] for col in self.stepwise_header}
 
     def record(self, **kwargs):
-        assert kwargs.keys() == self.episode_record.keys()
-        for k, v in kwargs.items():
-            self.episode_record[k].append(v)
+        for col in self.stepwise_header:
+            self.episode_record[col].append(kwargs[col])
 
-    def dump_episode_csv(self):
-        with open(self.result_path, 'a') as f:
+    def end_episode(self):
+        """must create a dict `self._episode_stats`"""
+        raise NotImplementedError
+
+    def dump_stepwise_csv(self, path):
+        with open(path, 'w') as f:
             writer = csv.writer(f)
-            data = zip(*(self.data[col] for col in self.header))
+            writer.writerow(self.stepwise_header)
+            data = zip(*(self.episode_record[col] for col in self.stepwise_header))
             writer.writerows(data)
 
-    def episode_summary(self):
-        # duration = time.time() - self.episode_timer
-        # episode_steps = self.data['episode_step'][-1]
-        # assert episode_steps == len(self.data['episode_step'])
-        # fps = episode_steps / duration
-        # total_duration = time.time() - self.global_timer
-        # episode_stats = {
-        #     'step': self.data['step'][-1],
-        #     'n_steps': self.n_steps,
-        #     'episode': self.episode,
-        #     'duration': duration,
-        #     'total_duration': total_duration,
-        #     'episode_steps': episode_steps,
-        #     'fps': fps,
-        #     'episode_reward': sum(self.data['reward']),
-        #     'quest': self.data['quest'][-1],
-        #     'seed': self.data['seed'][-1],
-        #     'loss': sum(self.data['loss']) / episode_steps,
-        #     'td_error': sum(self.data['td_error']) / episode_steps}
-        # print(self.template.format(**episode_stats))
-        pass
+    def dump_episodewise_csv(self):
+        with open(self.episodewise_csv_path, 'a') as f:
+            writer = csv.writer(f)
+            writer.writerow([self._episode_stats[col] for col in self.episodewise_header])
+
+    def dump_episodewise_str(self):
+        return self.template.format(**self._episode_stats)
+
+
+class StandardRecorder(Recorder):
+    stepwise_header = ['total_step', 'episode', 'episode_step', 'reward', 'action', 'is_random', 'epsilon', 'loss', 'td_error']
+    episodewise_header = ['total_step', 'episode', 'episode_step', 'reward', 'epsilon', 'loss', 'td_error', 'duration', 'sps', 'total_duration']
+    template = (
+        'total step:{total_step:,} episode:{episode} epi.step:{episode_step} reward:{reward:.0f} epsilon:{epsilon:.3f} '
+        'loss:{loss:.5f} td error:{td_error:.5f} '
+        'duration:{h_duration} sps:{sps:.1f} tot.dur.:{h_total_duration}')
+
+    def end_episode(self):
+        episode_step = self.episode_record['episode_step'][-1]
+        assert episode_step == len(self.episode_record['episode_step'])
+        duration = self.timer.lap_elapsed
+        self._episode_stats = {
+            'total_step': self.episode_record['total_step'][-1],
+            'episode': self.episode_record['episode'][-1],
+            'episode_step': episode_step,
+            'reward': np.nansum(self.episode_record['reward']),
+            'epsilon': self.episode_record['epsilon'][-1],
+            'loss': np.nanmean(self.episode_record['loss']),
+            'td_error': np.nanmean(self.episode_record['td_error']),
+            'duration': duration,
+            'h_duration': self.timer.lap_elapsed_str,
+            'sps': episode_step / duration,
+            'total_duration': self.timer.elapsed,
+            'h_total_duration': self.timer.elapsed_str}
 
 
 class Timer:
     def __init__(self):
-        self.laptime = None
-
-        self._start = None
-        self._lap_start = None
-        self._stop = None
-
-    def start(self):
         self._start = time.time()
         self._lap_start = self._start
-        return self
+        self._stop = None
 
     def lap(self):
-        lap_stop = time.time()
-        self.laptime = lap_stop - self._lap_start
-        self._lap_start = lap_stop
+        """start a new lap"""
+        self._lap_start = time.time()
 
     def stop(self):
         self._stop = time.time()
@@ -84,13 +95,12 @@ class Timer:
         min_ = int((seconds // 60) % 60)
         hour = int(seconds // 3600)
 
-        ret = f'{sec:.1f}sec'
         if hour > 0:
-            ret = f'{hour}hour {min_}min ' + ret
+            return f'{hour}h {min_}m {sec:.0f}s'
         elif min_ > 0:
-            ret = f'{min_}min ' + ret
-
-        return ret
+            return f'{min_}m {sec:.0f}s'
+        else:
+            return f'{sec:.1f}s'
 
     @property
     def elapsed(self):
@@ -102,12 +112,16 @@ class Timer:
         return _elapsed
 
     @property
+    def lap_elapsed(self):
+        return time.time() - self._lap_start
+
+    @property
     def elapsed_str(self):
         return self.tostr(self.elapsed)
 
     @property
-    def laptime_str(self):
-        return self.tostr(self.laptime)
+    def lap_elapsed_str(self):
+        return self.tostr(self.lap_elapsed)
 
 
 def report_error(_logger):

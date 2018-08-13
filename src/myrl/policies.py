@@ -21,7 +21,7 @@ class QPolicy:
 
 class GreedyExplorer:
     def __call__(self, step):
-        return False
+        return False, 0.0
 
 
 class LinearAnnealEpsilonGreedyExplorer:
@@ -31,8 +31,9 @@ class LinearAnnealEpsilonGreedyExplorer:
         self.final_exploration_step = final_exploration_step
 
     def __call__(self, step):
-        is_random = np.random.uniform() < self.get_epsilon(step)
-        return is_random
+        epsilon = self.get_epsilon(step)
+        is_random = np.random.uniform() < epsilon
+        return is_random, epsilon
 
     def get_epsilon(self, step):
         if step > self.final_exploration_step:
@@ -40,38 +41,3 @@ class LinearAnnealEpsilonGreedyExplorer:
         else:  # linear annealing
             epsilon = (self.final_epsilon - self.initial_epsilon) / self.final_exploration_step * step + self.initial_epsilon
         return epsilon
-
-# class Greedy(Policy):
-#     def __init__(self, action_space):
-#         self.action_space = action_space
-#
-#     def __call__(self, q_values, step):
-#         action = np.argmax(q_values)
-#         is_random = False
-#         return action, is_random
-#
-#     def get_epsilon(self, *args, **kwargs):
-#         return 0.0
-#
-#
-# class EpsilonGreedy(Policy):
-#     def __init__(self, action_space, initial_epsilon, final_epsilon, final_exploration_step=0):
-#         self.action_space = action_space
-#         self.initial_epsilon = initial_epsilon
-#         self.final_epsilon = final_epsilon
-#         self.final_exploration_step = final_exploration_step
-#
-#     def __call__(self, q_values, step):
-#         is_random = np.random.uniform() < self.get_epsilon(step)
-#         if is_random:
-#             action = self.action_space.sample()
-#         else:
-#             action = np.argmax(q_values)
-#         return action, is_random
-#
-#     def get_epsilon(self, step):
-#         if step > self.final_exploration_step:
-#             epsilon = self.final_epsilon
-#         else:  # linear annealing
-#             epsilon = (self.final_epsilon - self.initial_epsilon) / self.final_exploration_step * step + self.initial_epsilon
-#         return epsilon

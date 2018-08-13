@@ -7,29 +7,62 @@ import multiprocessing
 
 import redis
 import numpy as np
+from chainer.dataset.convert import to_device
 
 logger = logging.getLogger(__name__)
 
 
 class VanillaReplay:
-    def __init__(self, limit=1_000_000 // 4):
-        # limit: divided by action repeat
+    def __init__(self, limit=1_000_000, device=-1):
         self.limit = limit
-        self.experiences = []
+        self.device = device
+
+        self.replay = []
 
     def push(self, experience):
-        self.experiences.append(experience)
-        self.experiences = self.experiences[-self.limit:]
+        self.replay.append(experience)
+        self.replay = self.replay[-self.limit:]
 
     def mpush(self, experiences):
-        self.experiences.extend(experiences)
-        self.experiences = self.experiences[-self.limit:]
+        self.replay.extend(experiences)
+        self.replay = self.replay[-self.limit:]
 
     def sample(self, size):
-        return random.choices(self.experiences, k=size)
+        idxs = random.choices(range(len(self) - 1), k=size)
+        # NOTE: self.replay[idx + 1][0] may contain the next episode's state.
+        # However such situation is allowed since `done` is True in that case.
+        # If `next_state` has the special meaning when `done` is True, then fix this implementation.
+        return [tuple([*self.replay[idx]] + [self.replay[idx + 1][0]]) for idx in idxs]
+
+    def batch_sample(self, size):
+        experiences = self.sample(size)
+        states, actions, rewards, dones, next_states = zip(*experiences)
+
+        batch_state = to_device(self.device, np.array(states, dtype=np.float32) / 255)
+        batch_action = to_device(self.device, np.array(actions, dtype=np.int8))
+        batch_reward = to_device(self.device, np.array(rewards, dtype=np.float32))
+        batch_done = to_device(self.device, np.array(dones, dtype=np.int8))
+        batch_next_state = to_device(self.device, np.array(next_states, dtype=np.float32) / 255)
+
+        return batch_state, batch_action, batch_reward, batch_done, batch_next_state
 
     def __len__(self):
-        return len(self.experiences)
+        return len(self.replay)
+
+
+# class PrefetchReplay(VanillaReplay):
+#     def __init__(self, limit=1_000_000, device=0):
+#         self.device = device
+#
+#         self._prefetch_
+#         super().__init__(limit)
+#
+#     def sample(self, size):
+#         idxs = random.choices(range(len(self) - 1), k=size)
+#         # NOTE: self.replay[idx + 1][0] may contain the next episode's state.
+#         # However such situation is allowed since `done` is True in that case.
+#         # If `next_state` has the special meaning when `done` is True, then fix this implementation.
+#         return [tuple([*self.replay[idx]] + [self.replay[idx + 1][0]]) for idx in idxs]
 
 
 class RedisReplay:

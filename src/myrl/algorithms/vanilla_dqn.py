@@ -1,7 +1,7 @@
 import logging
 import os
-import csv
 
+import numpy as np
 from chainer import optimizers
 
 from ..networks import VanillaCNN
@@ -11,6 +11,7 @@ from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, GreedyExplore
 from ..replays import VanillaReplay
 from ..preprocessors import AtariPreprocessor
 from ..env_wrappers import setup_env
+from ..utils import StandardRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -27,37 +28,38 @@ class VanillaDQNAgent:
         """
         device: -1 (CPU), 0 (GPU)
         """
+        self.recorder = StandardRecorder(os.path.join(config['result_dir'], 'history.csv'))
+        self.recorder.start()
+
         self.config = config
         self.env_id = env_id
         self.device = device
 
         self.n_actions = setup_env(env_id).action_space.n
-        self.n_action_repeat = self.config['actor']['n_action_repeat']
-        self.render_episode_freq = self.config['history']['render_episode_freq']
+
+        n_action_repeat = self.config['actor']['n_action_repeat']
+        n_stack_frames = self.config['actor']['n_stack_frames']
 
         self.network = VanillaCNN(self.n_actions)
         if self.device >= 0:
             self.network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')
 
-        self.policy = QPolicy(self.networ)
-        # TODO: reward clipping を忘れずに！！
+        policy = QPolicy(self.network)
         self.actor = Actor(
-            setup_env(env_id, clip=False), self.policy,
-            LinearAnnealEpsilonGreedyExplorer(self.config['explorer']['params']),
+            setup_env(env_id, clip=False), policy,
+            LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params']),
             AtariPreprocessor(),
-            n_noop_at_reset=(0, 30), n_stack_frames=4, n_action_repeat=4)
+            n_noop_at_reset=self.config['actor']['n_noop_at_reset'], n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
         self.test_actor = Actor(
-            setup_env(env_id, clip=False), self.policy,
+            setup_env(env_id, clip=False), policy,
             GreedyExplorer(),
             AtariPreprocessor(),
-            n_noop_at_reset=(0, 0), n_stack_frames=4, n_action_repeat=4)
+            n_noop_at_reset=(0, 0), n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
 
-        # self.actor = self._build_actor(self.network, env_id, greedy=False)
-        # self.greedy_actor = self._build_actor(self.network, env_id, greedy=True)
         self.learner = self._build_learner(self.network, self.config['learner'])
 
-        self.replay = VanillaReplay(limit=self.config['replay']['limit'] // self.n_action_repeat)
+        self.replay = VanillaReplay(limit=self.config['replay']['limit'], device=self.device)
 
     # def _build_actor(self, network, env_id, greedy=False):
     #     if greedy:
@@ -93,71 +95,88 @@ class VanillaDQNAgent:
         learner = FittedQLearner(
             network=network,
             optimizer=optimizer,
-            gamma=learner_config['gamma'],
-            target_network_update_freq=learner_config['target_network_update_freq'], )
+            gamma=learner_config['gamma']
+        )
         logger.info(f'built a learner.')
         return learner
 
-    # def warmup(self, n_warmup_steps):
-    #     for exps in self.actor.warmup_act(n_warmup_steps):
-    #         if len(exps) > 0:
-    #             self.replay.mpush(exps)
-
     def train(self):
-        # self.warmup(self.config['n_warmup_steps'])
-
-        batch_size = self.config['learner']['batch_size']
-        learner_logging_freq = self.config['learner']['logging_freq']
-        learner_result_path = os.path.join(self.config['result_dir'], 'learner_history.csv')
-        with open(learner_result_path, 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(['update', 'loss', 'td_error'])
-
+        self.recorder.begin_episode()
         n_steps = 1
         n_episodes = 1
+        n_episode_steps = 1
         n_warmup_steps = self.config['n_warmup_steps']
-        updates = []
-        losses = []
-        td_errors = []
         if n_warmup_steps > 0:
+            warming_up = True
             logger.info(f'warming up {n_warmup_steps} steps...')
+        else:
+            warming_up = False
         while n_steps <= self.config['n_total_steps'] and n_episodes <= self.config['n_total_episodes']:
-            logger.debug(f'episode {self.actor.total_episodes}, step {self.actor.total_steps}')
+            if warming_up and n_steps > n_warmup_steps:
+                warming_up = False
+                logger.info(f'warming up {n_warmup_steps} steps... done.')
 
             # actor
-            state, action, reward, next_state, done, is_random = self.actor.act()
-            experience = (state, action, reward, next_state, done)
+            if warming_up:
+                state, action, reward, done, is_random, epsilon = self.actor.act(0)  # means epsilon = 1
+            else:
+                state, action, reward, done, is_random, epsilon = self.actor.act(n_steps)
+            reward = np.sign(reward)
+            experience = (state, action, reward, done)
             self.replay.push(experience)
 
             # learner
-            if n_steps >= n_warmup_steps:
-                experiences = self.replay.sample(batch_size)
-                loss, td_error = self.learner.learn(experiences)
-                updates.append(self.learner.total_updates)
-                losses.append(loss)
-                td_errors.append(td_error)
-            if learner_logging_freq != 0 and self.learner.total_updates % learner_logging_freq == 0:
-                with open(learner_result_path, 'a') as f:
-                    writer = csv.writer(f)
-                    writer.writerows(list(zip(*[updates, losses, td_errors])))
-                self.learner.timer.lap()
-                n = len(losses)
-                logger.info(
-                    f'finished {n} updates with avg loss {sum(losses) / n:.5f}, td_error {sum(td_errors) / n:.5f} in {self.learner.timer.laptime_str} '
-                    f'({n / self.learner.timer.laptime:.2f} batches per seconds) '
-                    f'(total_updates {self.learner.total_updates:,}, total_time {self.learner.timer.elapsed_str})')
-                updates = []
-                losses = []
-                td_errors = []
+            if not warming_up and n_steps % self.config['learner']['target_network_update_freq_step'] == 0:
+                self.learner.update_target_network()
+            if not warming_up and n_steps % self.config['learner']['learn_freq_step'] == 0:
+                batch_state, batch_action, batch_reward, batch_done, batch_next_state = self.replay.batch_sample(self.config['learner']['batch_size'])
+                loss, td_error = self.learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
+            else:
+                loss, td_error = float('nan'), float('nan')
 
-            # dump episode and greedy actor's play
-            if done and self.actor.total_episodes % self.render_episode_freq == 0:
-                logger.info(f'Memory length at episode {self.actor.total_episodes}: {len(self.replay)}')
-                self.actor.dump_episode()
+            # recorder
+            self.recorder.record(
+                total_step=n_steps, episode=n_episodes, episode_step=n_episode_steps,
+                reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=loss, td_error=td_error)
 
-                logger.info('greedy actor is playing...')
-                self.greedy_actor.total_episodes = self.actor.total_episodes - 1
-                self.greedy_actor.total_steps = self.actor.total_steps
-                self.greedy_actor.act_episode()
-                self.greedy_actor.dump_episode()
-                logger.info('greedy actor is playing... done.')
+            # if episode is done...
+            if done:
+                self.recorder.end_episode()
+                self.recorder.dump_episodewise_csv()
+                logger.info(self.recorder.dump_episodewise_str())
+
+                # testing
+                if n_episodes % self.config['test_freq_episode'] == 0:
+                    result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:05}')
+                    os.makedirs(result_episode_dir, exist_ok=True)
+                    self.actor.dump_episode_gif(os.path.join(result_episode_dir, 'play.gif'))
+                    self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'step_history.csv'))
+                    with open(os.path.join(result_episode_dir, 'summary.txt'), 'w') as f:
+                        print(self.recorder.dump_episodewise_str(), file=f)
+
+                    # test_actor's play
+                    logger.info(f'(episode {n_episodes}) test_actor is playing...')
+                    self.recorder.begin_episode()
+                    n_test_episode_steps = 1
+                    while True:
+                        state, action, reward, done, is_random, epsilon = self.test_actor.act(n_steps)
+                        self.recorder.record(
+                            total_step=n_steps, episode=n_episodes, episode_step=n_test_episode_steps,
+                            reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=0.0, td_error=0.0)
+                        n_test_episode_steps += 1
+                        if done:
+                            break
+                    self.recorder.end_episode()
+                    logger.info(self.recorder.dump_episodewise_str())
+                    self.test_actor.dump_episode_gif(os.path.join(result_episode_dir, 'test_play.gif'))
+                    self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'test_step_history.csv'))
+                    with open(os.path.join(result_episode_dir, 'test_summary.txt'), 'w') as f:
+                        print(self.recorder.dump_episodewise_str(), file=f)
+
+                self.recorder.begin_episode()
+                n_episodes += 1
+                n_episode_steps = 1
+            else:  # if episode continues
+                n_episode_steps += 1
+
+            n_steps += 1

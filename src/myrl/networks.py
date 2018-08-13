@@ -1,3 +1,4 @@
+import numpy as np
 import chainer
 from chainer import initializers
 import chainer.links as L
@@ -14,11 +15,12 @@ class VanillaCNN(chainer.Chain):
     """
     def __init__(self, n_actions):
         super().__init__()
-        # Keras implementations use their default initilzier (GlorotUniform),
-        # and the original DeepMind implementation also uses it (maybe...). See:
-        # https://github.com/torch/nn/blob/master/SpatialConvolution.lua#L34
-        # https://github.com/kuz/DeepMind-Atari-Deep-Q-Learner/blob/master/dqn/convnet.lua
-        initializer = initializers.GlorotUniform()
+        # Original DeepMind implementation looks to use Lua Torch with default weight initialization: https://github.com/deepmind/dqn/blob/master/dqn/convnet.lua
+        # Lua Torch's default weight initializer looks like Uniform with endpoint 1/sqrt{fan_in}.
+        # (For convolutions) https://github.com/torch/nn/blob/master/SpatialConvolution.lua#L38
+        # (For linears) https://github.com/torch/nn/blob/master/Linear.lua#L25
+        # HeUniform with scale = sqrt{6} is the one DeepMind did.
+        initializer = initializers.HeUniform(scale=np.sqrt(6))
         with self.init_scope():
             self.conv1 = L.Convolution2D(
                 in_channels=4,
