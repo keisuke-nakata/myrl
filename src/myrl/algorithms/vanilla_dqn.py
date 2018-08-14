@@ -37,30 +37,15 @@ class VanillaDQNAgent:
 
         self.n_actions = setup_env(env_id).action_space.n
 
-        # n_action_repeat = self.config['actor']['n_action_repeat']
-        # n_stack_frames = self.config['actor']['n_stack_frames']
-
         self.network = VanillaCNN(self.n_actions)
         if self.device >= 0:
             self.network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')
 
         policy = QPolicy(self.network)
-        # self.actor = Actor(
-        #     setup_env(env_id, clip=False), policy,
-        #     LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params']),
-        #     AtariPreprocessor(),
-        #     n_noop_at_reset=self.config['actor']['n_noop_at_reset'], n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
-        # self.test_actor = Actor(
-        #     setup_env(env_id, clip=False), policy,
-        #     GreedyExplorer(),
-        #     AtariPreprocessor(),
-        #     n_noop_at_reset=(0, 0), n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
         self.actor = self._build_actor(env_id, policy)
         self.test_actor = self._build_actor(env_id, policy, test=True)
-
         self.learner = self._build_learner(self.network, self.config['learner'])
-
         self.replay = VanillaReplay(limit=self.config['replay']['limit'], device=self.device)
 
     def _build_actor(self, env_id, policy, test=False):
@@ -74,13 +59,11 @@ class VanillaDQNAgent:
             explorer = LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params'])
 
         actor = Actor(env, policy, explorer, preprocessor, n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
-
         logger.info(f'built {"a test " if test else "an "}actor.')
         return actor
 
     def _build_learner(self, network, learner_config):
         optimizer = getattr(optimizers, learner_config['optimizer']['class'])(**learner_config['optimizer']['params'])
-
         learner = FittedQLearner(
             network=network,
             optimizer=optimizer,
