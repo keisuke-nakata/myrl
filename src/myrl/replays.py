@@ -39,6 +39,15 @@ class VanillaReplay:
         else:
             end = len(self) - 1
         idxs = np.random.randint(end, size=size)  # `np.random.randint` is 5x faster than `np.random.choice` or `random.choices`.
+        taboo = self.limit - 1 if self.head == 0 else self.head - 1  # current head points to the *next* index
+        if taboo in idxs:
+            for i, idx in enumerate(idxs):
+                if idx != taboo:
+                    continue
+                while idx == taboo:
+                    idx = np.random.randint(end)
+                idxs[i] = idx
+
         # NOTE: self.replay[idx + 1][0] may contain the next episode's state.
         # However such situation is allowed since `done` is True in that case.
         # If `next_state` has the special meaning when `done` is True, then fix this implementation.
