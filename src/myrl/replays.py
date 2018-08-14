@@ -34,11 +34,15 @@ class VanillaReplay:
     #     self.replay = self.replay[-self.limit:]
 
     def sample(self, size):
-        idxs = np.random.randint(len(self) - 1, size=size)  # `np.random.randint` is 5x faster than `np.random.choice` or `random.choices`.
+        if self.full:
+            end = self.limit
+        else:
+            end = len(self) - 1
+        idxs = np.random.randint(end, size=size)  # `np.random.randint` is 5x faster than `np.random.choice` or `random.choices`.
         # NOTE: self.replay[idx + 1][0] may contain the next episode's state.
         # However such situation is allowed since `done` is True in that case.
         # If `next_state` has the special meaning when `done` is True, then fix this implementation.
-        return [tuple([*self.replay[idx]] + [self.replay[idx + 1][0]]) for idx in idxs]
+        return [tuple([*self.replay[idx]] + [self.replay[(idx + 1) % self.limit][0]]) for idx in idxs]
 
     def batch_sample(self, size):
         experiences = self.sample(size)
