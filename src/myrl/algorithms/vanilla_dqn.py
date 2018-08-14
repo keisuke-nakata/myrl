@@ -37,8 +37,8 @@ class VanillaDQNAgent:
 
         self.n_actions = setup_env(env_id).action_space.n
 
-        n_action_repeat = self.config['actor']['n_action_repeat']
-        n_stack_frames = self.config['actor']['n_stack_frames']
+        # n_action_repeat = self.config['actor']['n_action_repeat']
+        # n_stack_frames = self.config['actor']['n_stack_frames']
 
         self.network = VanillaCNN(self.n_actions)
         if self.device >= 0:
@@ -46,48 +46,37 @@ class VanillaDQNAgent:
         logger.info(f'built a network with device {self.device}.')
 
         policy = QPolicy(self.network)
-        self.actor = Actor(
-            setup_env(env_id, clip=False), policy,
-            LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params']),
-            AtariPreprocessor(),
-            n_noop_at_reset=self.config['actor']['n_noop_at_reset'], n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
-        self.test_actor = Actor(
-            setup_env(env_id, clip=False), policy,
-            GreedyExplorer(),
-            AtariPreprocessor(),
-            n_noop_at_reset=(0, 0), n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
+        # self.actor = Actor(
+        #     setup_env(env_id, clip=False), policy,
+        #     LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params']),
+        #     AtariPreprocessor(),
+        #     n_noop_at_reset=self.config['actor']['n_noop_at_reset'], n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
+        # self.test_actor = Actor(
+        #     setup_env(env_id, clip=False), policy,
+        #     GreedyExplorer(),
+        #     AtariPreprocessor(),
+        #     n_noop_at_reset=(0, 0), n_stack_frames=n_stack_frames, n_action_repeat=n_action_repeat)
+        self.actor = self._build_actor(env_id, policy)
+        self.test_actor = self._build_actor(env_id, policy, test=True)
 
         self.learner = self._build_learner(self.network, self.config['learner'])
 
         self.replay = VanillaReplay(limit=self.config['replay']['limit'], device=self.device)
 
-    # def _build_actor(self, network, env_id, greedy=False):
-    #     if greedy:
-    #         env = setup_env(env_id, clip=False)
-    #         policy = Greedy(action_space=env.action_space)
-    #         n_action_repeat = 1
-    #         n_random_actions_at_reset = (0, 0)
-    #         result_dir = os.path.join(self.config['result_dir'], 'greedy')
-    #     else:
-    #         env = setup_env(env_id, clip=True)
-    #         policy = EpsilonGreedy(action_space=env.action_space, **self.config['policy']['params'])
-    #         n_action_repeat = self.n_action_repeat
-    #         n_random_actions_at_reset = tuple(self.config['actor']['n_random_actions_at_reset'])
-    #         result_dir = os.path.join(self.config['result_dir'], 'actor')
-    #     obs_preprocessor = AtariPreprocessor()
-    #
-    #     actor = QActor(
-    #         env=env,
-    #         network=network,
-    #         policy=policy,
-    #         n_action_repeat=n_action_repeat,
-    #         obs_preprocessor=obs_preprocessor,
-    #         n_random_actions_at_reset=n_random_actions_at_reset,
-    #         n_stack_frames=self.config['n_stack_frames'],
-    #         result_dir=result_dir)
-    #
-    #     logger.info(f'built {"a greedy " if greedy else "an "}actor.')
-    #     return actor
+    def _build_actor(self, env_id, policy, test=False):
+        env = setup_env(env_id, clip=False)
+        preprocessor = AtariPreprocessor()
+        if test:
+            n_noop_at_reset = (0, 0)
+            explorer = GreedyExplorer()
+        else:
+            n_noop_at_reset = self.config['actor']['n_noop_at_reset']
+            explorer = LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params'])
+
+        actor = Actor(env, policy, explorer, preprocessor, n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
+
+        logger.info(f'built {"a test " if test else "an "}actor.')
+        return actor
 
     def _build_learner(self, network, learner_config):
         optimizer = getattr(optimizers, learner_config['optimizer']['class'])(**learner_config['optimizer']['params'])
