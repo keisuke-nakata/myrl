@@ -9,6 +9,8 @@ n_stack_frames = 4
 
 test_freq_episode = 100
 
+actor_leaner_network_sync_freq_step = 10_000
+
 
 [replay]
 limit = 1_000_000  # requires approximately ___ GB memory

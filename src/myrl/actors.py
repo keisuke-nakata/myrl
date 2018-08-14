@@ -3,7 +3,6 @@ import random
 
 import numpy as np
 import imageio
-from chainer.serializers import load_hdf5
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +91,7 @@ class Actor:
 
     def dump_episode_gif(self, path):
         imageio.mimwrite(path, self.episode_obses, fps=60)
+        logger.info(f'dump episode at {path}.')
 
     def load_parameters(self, path):
         self.policy.load_parameters(path)

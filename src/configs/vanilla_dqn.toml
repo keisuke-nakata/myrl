@@ -10,7 +10,7 @@ test_freq_episode = 100
 
 
 [replay]
-limit = 1_000_000  # requires approximately ___ GB memory
+limit = 1_000_000  # requires approximately 33 GB memory
 
 
 [explorer]

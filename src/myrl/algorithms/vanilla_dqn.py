@@ -46,7 +46,7 @@ class VanillaDQNAgent:
         self.actor = self._build_actor(env_id, policy)
         self.test_actor = self._build_actor(env_id, policy, test=True)
         self.learner = self._build_learner(self.network, self.config['learner'])
-        self.replay = VanillaReplay(limit=self.config['replay']['limit'], device=self.device)
+        self.replay = VanillaReplay(limit=self.config['replay']['limit'])
 
     def _build_actor(self, env_id, policy, test=False):
         env = setup_env(env_id, clip=False)

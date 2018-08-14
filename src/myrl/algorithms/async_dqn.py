@@ -26,7 +26,7 @@ step: 何回行動を選択したか。つまり、step の回数は、frame の
 """
 
 
-def act(n_actions, device, env_id, explorer_config, actor_config, actor_exp_queue, actor_msg_queue, parameter_lock):
+def act(n_actions, device, env_id, parameter_path, explorer_config, actor_config, actor_msg_queue, actor_exp_queue, parameter_lock):
     network = VanillaCNN(n_actions)
     if device >= 0:
         network.to_gpu(device)
@@ -41,21 +41,24 @@ def act(n_actions, device, env_id, explorer_config, actor_config, actor_exp_queu
     logger.info(f'built an actor.')
 
     while True:
-        msg = actor_msg_queue.get()
+        msg = actor_msg_queue.get()  # this blocks if empty
         command = msg[0]
-        if command == 'step':  # action
-            state, action, reward, done, is_random, epsilon = actor.act(msg[1])
-            actor_exp_queue.put((state, action, reward, done, is_random, epsilon))
-        elif command == 'load':  # load parameter
+        if command == 'step':
+            step = msg[1]
+            dump_episode_path = msg[2]
+
+            state, action, reward, done, is_random, epsilon = actor.act(step)
+            actor_exp_queue.put((state, action, reward, done, is_random, epsilon))  # infinite queue does not block
+            if done and dump_episode_path is not None:
+                actor.dump_episode_gif(dump_episode_path)
+        elif command == 'load':
             with parameter_lock:
-                actor.load_parameters(msg[1])
-        elif command == 'dump':  # dump episode
-            pass
+                actor.load_parameters(parameter_path)
         else:
-            raise ValueError(f'Unknown command message {msg}')
+            raise ValueError(f'Unknown message {msg}')
 
 
-def learn(n_actions, device, learner_config, learner_batch_queue, learner_msg_queue, learner_result_queue, parameter_lock):
+def learn(n_actions, device, parameter_path, learner_config, learner_msg_queue, batch_queue, replay_msg_queue, learner_result_queue, parameter_lock):
     network = VanillaCNN(n_actions)
     if device >= 0:
         network.to_gpu(device)
@@ -71,19 +74,35 @@ def learn(n_actions, device, learner_config, learner_batch_queue, learner_msg_qu
     logger.info(f'built a learner.')
 
     while True:
-        msg = learner_msg_queue.get()
+        msg = learner_msg_queue.get()  # this blocks if empty
         command = msg[0]
-        if command == 'step':  # learn
-            batch = learner_batch_queue.get()
+        if command == 'learn':
+            batch = batch_queue.get()  # this blocks if empty
+            replay_msg_queue.put(('fetch', None))
             loss, td_error = learner.learn(*batch)
-            learner_result_queue.put((loss, td_error))
-        elif command == 'sync':  # target network sync
+            learner_result_queue.put((loss, td_error))  # infinite queue does not block
+        elif command == 'sync':
             learner.update_target_network()
-        elif command == 'dump':  # dump parameter
+        elif command == 'dump':
             with parameter_lock:
-                pass
+                learner.dump_parameters(parameter_path)
         else:
-            raise ValueError(f'Unknown command message {msg}')
+            raise ValueError(f'Unknown message {msg}')
+
+
+def replay(limit, batch_size, batch_queue, replay_msg_queue):
+    replay = VanillaReplay(limit=limit)
+    while True:
+        msg = replay_msg_queue.get()  # this blocks if empty
+        command = msg[0]
+        if command == 'fetch':
+            batch = replay.batch_sample(batch_size)
+            batch_queue.put(batch)  # infinite queue does not block
+        elif command == 'push':
+            exp = msg[1]
+            replay.push(exp)
+        else:
+            raise ValueError(f'Unknown message {msg}')
 
 
 class AsyncDQNAgent:
@@ -109,24 +128,36 @@ class AsyncDQNAgent:
 
         # policy = QPolicy(self.network)
         # self.test_actor = self._build_actor(env_id, policy, test=True)
-        self.replay = VanillaReplay(limit=self.config['replay']['limit'], device=self.device)
+        # self.replay = VanillaReplay(limit=self.config['replay']['limit'], device=self.device)
 
+        parameter_path = '!!!!!'
+
+        # queues and locks
+        self.actor_msg_queue = mp.Queue()
+        self.actor_exp_queue = mp.Queue()
+        self.learner_msg_queue = mp.Queue()
+        self.batch_queue = mp.Queue()
+        self.replay_msg_queue = mp.Queue()
+        self.learner_result_queue = mp.Queue()
         self.parameter_lock = mp.Lock()
 
         # act process
-        self.actor_exp_queue = mp.Queue()
-        self.actor_msg_queue = mp.Queue()
         self.act_process = mp.Process(target=act, args=(
-            self.n_actions, CPU_ID, env_id, self.config['explorer'], self.config['actor'], self.actor_exp_queue, self.actor_msg_queue, self.parameter_lock))
+            self.n_actions, CPU_ID, env_id, parameter_path, self.config['explorer'], self.config['actor'],
+            self.actor_msg_queue, self.actor_exp_queue, self.parameter_lock))
         self.act_process.start()
 
         # learn process
-        self.learner_batch_queue = mp.Queue()
-        self.learner_msg_queue = mp.Queue()
-        self.learner_result_queue = mp.Queue()
         self.learn_process = mp.Process(target=learn, args=(
-            self.n_actions, device, self.config['learner'], self.learner_batch_queue, self.learner_msg_queue, self.learner_result_queue, self.parameter_lock))
+            self.n_actions, device, parameter_path, self.config['learner'],
+            self.learner_msg_queue, self.batch_queue, self.replay_msg_queue, self.learner_result_queue, self.parameter_lock))
         self.learn_process.start()
+
+        # replay procerss
+        self.replay_process = mp.Process(target=replay, args=(
+            self.config['replay']['limit'], self.config['learner']['batch_size'],
+            self.batch_queue, self.replay_msg_queue))
+        self.replay_process.start()
 
     def _build_actor(self, env_id, policy, test=False):
         env = setup_env(env_id, clip=False)
@@ -154,59 +185,76 @@ class AsyncDQNAgent:
 
     def train(self):
         self.recorder.begin_episode()
+        learn_freq_step = self.config['learner']['learn_freq_step']
+
         n_warmup_steps = self.config['n_warmup_steps']
         if n_warmup_steps > 0:
             warming_up = True
             logger.info(f'warming up {n_warmup_steps} steps...')
         else:
             warming_up = False
+        assert warming_up  # requires warming_up in order to start replay_process fetching
+
         # run actor at first to fill the queue
-        for i in range(self.config['learner']['learn_freq_step']):
-            step = 0 if warming_up else i
-            self.actor_msg_queue.put(('step', step))
-        n_steps = 1 + self.config['learner']['learn_freq_step']
+        for future_step in range(1, learn_freq_step + 1):
+            step = 0 if warming_up else future_step  # 0 means epsilon = 1
+            self.actor_msg_queue.put(('step', step, None))
+
+        n_steps = 1
         n_episodes = 1
         n_episode_steps = 1
         while n_steps <= self.config['n_total_steps'] and n_episodes <= self.config['n_total_episodes']:
             if warming_up and n_steps > n_warmup_steps:  # end of the warming-up
                 warming_up = False
                 logger.info(f'warming up {n_warmup_steps} steps... done.')
-                # prefetch two batches and send one of them to the learner at end of the warming-up
-                batch = self.replay.batch_sample(self.config['learner']['batch_size'])
-                self.learner_batch_queue.put(batch)
-                self.learner_msg_queue.put(('step', None))
-                batch = self.replay.batch_sample(self.config['learner']['batch_size'])
-                self.learner_batch_queue.put(batch)
+                # prefetch a batch at end of the warming-up.
+                # succeeding fetching will be fired from learn_process.
+                self.replay_msg_queue.put(('fetch', None))
+                self.learner_msg_queue.put(('learn', None))  # to fill the queue first
 
-            for inner_step in range(n_steps, n_steps + self.config['learner']['learn_freq_step']):
-                # trigger actor
-                step = 0 if warming_up else inner_step  # 0 means epsilon = 1
-                self.actor_msg_queue.put(('step', step))
-
-                if not warming_up and inner_step % self.config['learner']['target_network_update_freq_step'] == 0:
-                    self.learner_msg_queue.put(('sync', None))
-            # trigger learner and receive result
+            # trigger next learner step
             if not warming_up:
-                self.learner_msg_queue.put(('step', None))
-                # prefetch the next batch
-                batch = self.replay.batch_sample(self.config['learner']['batch_size'])
-                self.learner_batch_queue.put(batch)
+                self.learner_msg_queue.put(('learn', None))
+
+            # trigger next actor steps
+            for future_step in range(n_steps + learn_freq_step, n_steps + learn_freq_step * 2):
+                if warming_up:
+                    step = 0  # 0 means epsilon = 1
+                    dump_episode_path = None
+                else:
+                    step = future_step
+                    if n_episodes % self.config['test_freq_episode'] == 0:
+                        # result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:05}')
+                        # dump_episode_path = '!!!!!'  # FIXME
+                        dump_episode_path = None
+                    else:
+                        dump_episode_path = None
+                self.actor_msg_queue.put(('step', step, dump_episode_path))
+
+            # get current results and push them to recorder/replay
+            if not warming_up:
                 loss, td_error = self.learner_result_queue.get()
             else:
                 loss, td_error = float('nan'), float('nan')
+            for current_step in range(n_steps, n_steps + learn_freq_step):
+                if not warming_up and current_step % self.config['learner']['target_network_update_freq_step'] == 0:
+                    self.learner_msg_queue.put(('sync', None))
+                if not warming_up and current_step % self.config['actor_leaner_network_sync_freq_step'] == 0:
+                    self.learner_msg_queue.put(('dump', None))
+                    self.actor_msg_queue.put(('load', None))
 
-            # receive results from actor and record them
-            for inner_step in range(n_steps, n_steps + self.config['learner']['learn_freq_step']):
                 state, action, reward, done, is_random, epsilon = self.actor_exp_queue.get()
                 reward = np.sign(reward)
+
+                # replay
                 experience = (state, action, reward, done)
-                self.replay.push(experience)
+                self.replay_msg_queue.put(('push', experience))
 
                 # recorder
-                record_loss = loss if inner_step == n_steps else float('nan')
-                record_td_error = td_error if inner_step == n_steps else float('nan')
+                record_loss = loss if current_step == n_steps else float('nan')
+                record_td_error = td_error if current_step == n_steps else float('nan')
                 self.recorder.record(
-                    total_step=inner_step, episode=n_episodes, episode_step=n_episode_steps,
+                    total_step=current_step, episode=n_episodes, episode_step=n_episode_steps,
                     reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=record_loss, td_error=record_td_error)
 
                 # if episode is done...
@@ -249,4 +297,4 @@ class AsyncDQNAgent:
                 else:  # if episode continues
                     n_episode_steps += 1
 
-            n_steps += self.config['learner']['learn_freq_step']
+            n_steps += learn_freq_step
