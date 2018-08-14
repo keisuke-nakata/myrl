@@ -22,6 +22,10 @@ class FittedQLearner:
         self.target_network = self.network.copy(mode='copy')  # this copies `_device_id` as well
 
     def learn(self, batch_state, batch_action, batch_reward, batch_done, batch_next_state):
+        batch_state, batch_action, batch_reward, batch_done, batch_next_state = to_device(
+            self.network._device_id,
+            (batch_state, batch_action, batch_reward, batch_done, batch_next_state))
+
         with chainer.no_backprop_mode():
             batch_target_q = self.target_network(batch_next_state)
             batch_y = batch_reward + self.gamma * (1 - batch_done) * F.max(batch_target_q, axis=1)

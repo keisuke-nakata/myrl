@@ -89,10 +89,8 @@ class VanillaDQNAgent:
                 logger.info(f'warming up {n_warmup_steps} steps... done.')
 
             # actor
-            if warming_up:
-                state, action, reward, done, is_random, epsilon = self.actor.act(0)  # means epsilon = 1
-            else:
-                state, action, reward, done, is_random, epsilon = self.actor.act(n_steps)
+            step = 0 if warming_up else n_steps  # 0 means epsilon = 1
+            state, action, reward, done, is_random, epsilon = self.actor.act(step)
             reward = np.sign(reward)
             experience = (state, action, reward, done)
             self.replay.push(experience)

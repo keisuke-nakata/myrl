@@ -1,1 +1,1 @@
-from . import vanilla_dqn#, async_dqn
+from . import vanilla_dqn, async_dqn  # noqa

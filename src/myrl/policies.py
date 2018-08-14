@@ -1,8 +1,12 @@
+import logging
+
 import numpy as np
 import chainer
 from chainer.dataset.convert import to_device
+from chainer.serializers import load_hdf5
 
 CPU_ID = -1
+logger = logging.getLogger(__name__)
 
 
 class QPolicy:
@@ -17,6 +21,10 @@ class QPolicy:
         q_values = to_device(CPU_ID, q_values.array)[0]
         action = np.argmax(q_values)
         return action
+
+    def load_parameters(self, path):
+        load_hdf5(path, self.network)
+        logger.info(f'load parameters from {path}')
 
 
 class GreedyExplorer:

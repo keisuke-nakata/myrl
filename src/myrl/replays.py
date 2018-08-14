@@ -38,11 +38,17 @@ class VanillaReplay:
         experiences = self.sample(size)
         states, actions, rewards, dones, next_states = zip(*experiences)
 
-        batch_state = to_device(self.device, np.array(states, dtype=np.float32) / 255)
-        batch_action = to_device(self.device, np.array(actions, dtype=np.int8))
-        batch_reward = to_device(self.device, np.array(rewards, dtype=np.float32))
-        batch_done = to_device(self.device, np.array(dones, dtype=np.int8))
-        batch_next_state = to_device(self.device, np.array(next_states, dtype=np.float32) / 255)
+        # batch_state = to_device(self.device, np.array(states, dtype=np.float32) / 255)
+        # batch_action = to_device(self.device, np.array(actions, dtype=np.int8))
+        # batch_reward = to_device(self.device, np.array(rewards, dtype=np.float32))
+        # batch_done = to_device(self.device, np.array(dones, dtype=np.int8))
+        # batch_next_state = to_device(self.device, np.array(next_states, dtype=np.float32) / 255)
+
+        batch_state = np.array(states, dtype=np.float32) / 255
+        batch_action = np.array(actions, dtype=np.int8)
+        batch_reward = np.array(rewards, dtype=np.float32)
+        batch_done = np.array(dones, dtype=np.int8)
+        batch_next_state = np.array(next_states, dtype=np.float32) / 255
 
         return batch_state, batch_action, batch_reward, batch_done, batch_next_state
 
