@@ -4,7 +4,7 @@ import gym
 
 def setup_env(env_id, clip=False, suddendeath=False):
     env = gym.make(env_id)
-    env._max_episode_steps = 10000
+    env._max_episode_steps = 40000
     if clip:
         env = RewardClippingWrapper(env)
     if suddendeath:

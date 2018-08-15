@@ -31,6 +31,10 @@ class VanillaDQNAgent:
         self.recorder = StandardRecorder(os.path.join(config['result_dir'], 'history.csv'))
         self.recorder.start()
 
+        self.test_recorder = StandardRecorder(os.path.join(config['result_dir'], 'test_history.csv'))
+        self.test_recorder.template = '(test) ' + self.test_recorder.template
+        self.test_recorder.start()
+
         self.config = config
         self.env_id = env_id
         self.device = device
@@ -117,36 +121,46 @@ class VanillaDQNAgent:
 
                 # testing
                 if n_episodes % self.config['test_freq_episode'] == 0:
-                    result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:05}')
+                    # save actor's play.
+                    result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:06}')
                     os.makedirs(result_episode_dir, exist_ok=True)
                     self.actor.dump_episode_gif(os.path.join(result_episode_dir, 'play.gif'))
                     self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'step_history.csv'))
                     with open(os.path.join(result_episode_dir, 'summary.txt'), 'w') as f:
                         print(self.recorder.dump_episodewise_str(), file=f)
 
-                    # test_actor's play
+                    # test_actor's play and save it.
                     logger.info(f'(episode {n_episodes}) test_actor is playing...')
-                    self.recorder.begin_episode()
+                    self.test_recorder.begin_episode()
+                    n_test_steps = n_steps
                     n_test_episode_steps = 1
                     while True:
                         state, action, reward, done, is_random, epsilon = self.test_actor.act(n_steps)
-                        self.recorder.record(
-                            total_step=n_steps, episode=n_episodes, episode_step=n_test_episode_steps,
-                            reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=0.0, td_error=0.0)
+                        self.test_recorder.record(
+                            total_step=n_test_steps, episode=n_episodes, episode_step=n_test_episode_steps,
+                            reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=float('nan'), td_error=float('nan'))
+                        n_test_steps += 1
                         n_test_episode_steps += 1
                         if done:
                             break
-                    self.recorder.end_episode()
-                    logger.info(self.recorder.dump_episodewise_str())
+                    self.test_recorder.end_episode()
+                    self.test_recorder.dump_episodewise_csv()
+                    logger.info(self.test_recorder.dump_episodewise_str())
                     self.test_actor.dump_episode_gif(os.path.join(result_episode_dir, 'test_play.gif'))
-                    self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'test_step_history.csv'))
+                    self.test_recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'test_step_history.csv'))
                     with open(os.path.join(result_episode_dir, 'test_summary.txt'), 'w') as f:
-                        print(self.recorder.dump_episodewise_str(), file=f)
+                        print(self.test_recorder.dump_episodewise_str(), file=f)
 
                 self.recorder.begin_episode()
                 n_episodes += 1
                 n_episode_steps = 1
+
+                # preemptive timer...
+                if self.recorder.timer.elapsed > 60 * 60 * 20:  # 20 hours
+                    break
             else:  # if episode continues
                 n_episode_steps += 1
 
             n_steps += 1
+
+        return self.recorder.episodewise_csv_path, self.test_recorder.episodewise_csv_path

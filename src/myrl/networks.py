@@ -11,7 +11,7 @@ class VanillaCNN(chainer.Chain):
     - https://www.cs.toronto.edu/~vmnih/docs/dqn.pdf (NIPS version)
     - https://storage.googleapis.com/deepmind-media/dqn/DQNNaturePaper.pdf (Nature version)
 
-    We follow the nature one.
+    This follows the nature version.
     """
     def __init__(self, n_actions):
         super().__init__()

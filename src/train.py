@@ -48,16 +48,15 @@ def train(config_path, env_id, device):
             raise ValueError(f'Unknown agent: {agent_name}')
         agent.build(config, env_id, device)
         logger.info('training start')
-        agent.train()
+        csv_path, test_csv_path = agent.train()
         logger.info('training end')
     except:  # noqa
         logger.exception('train failed')
         with open(os.path.join(result_dir, 'error.txt'), 'a') as f:
             traceback.print_exc(file=f)
     finally:
-        # _visualize(os.path.join(result_dir, 'history.csv'), os.path.join(result_dir, 'history.png'), window=10)
-        # _visualize(os.path.join(result_dir, 'greedy', 'history.csv'), os.path.join(result_dir, 'greedy', 'history.png'), window=10)
-        pass
+        _visualize(csv_path)
+        _visualize(test_csv_path)
 
 
 if __name__ == '__main__':

@@ -31,9 +31,8 @@ class Actor:
         self.is_done = False
         self.episode_obses.append(observation)
 
-        # random action at reset
-        # because states consist of 4 skipped raw frames, some initial frames may be ignored
-        # in order to construct valid states.
+        # noop action at reset
+        # because states consist of 4 skipped raw frames, some initial frames may be ignored in order to construct valid states.
         done = False
         n_random_actions = random.randint(*self.n_noop_at_reset)
         for _ in range(n_random_actions):
