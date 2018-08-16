@@ -2,6 +2,7 @@ agent_name = "VanillaDQNAgent"
 result_dir = "results/vanilla_dqn/{env_id}/{now}"
 
 n_warmup_steps = 50_000
+# n_warmup_steps = 500
 n_total_steps = 50_000_000
 n_total_episodes = 1_000_000_000  # infinite...
 n_stack_frames = 4
@@ -17,6 +18,7 @@ limit = 1_000_000  # requires approximately 33 GB memory
 
 [explorer.params]
 initial_epsilon = 1.0
+# initial_epsilon = 0.1
 final_epsilon = 0.1
 final_exploration_step = 1_000_000
 
@@ -28,12 +30,21 @@ target_network_update_freq_step = 40_000  # original parameter: 10_000, but mult
 # target_network_update_soft = 0.01
 learn_freq_step = 4
 
+# [learner.optimizer]
+# class = "RMSprop"
+#
+# [learner.optimizer.params]
+# lr = 0.00025
+# alpha = 0.95
+# eps = 0.01
+
 [learner.optimizer]
-class = "RMSprop"
+class = "RMSpropGraves"
 
 [learner.optimizer.params]
 lr = 0.00025
 alpha = 0.95
+momentum = 0.0
 eps = 0.01
 
 
@@ -41,3 +52,8 @@ eps = 0.01
 n_noop_at_reset = [0, 30]
 n_stack_frames = 4
 n_action_repeat = 4
+
+
+# TODO: Episodic env (life を失うごとに done になるやつ)
+# https://github.com/deepmind/alewrap/blob/master/alewrap/GameEnvironment.lua#L113
+# https://github.com/chainer/chainerrl/blob/master/examples/ale/atari_wrappers.py#L69

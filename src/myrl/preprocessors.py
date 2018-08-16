@@ -21,15 +21,25 @@ class MaxWithPrevious:
 
 
 class GrayScale:
+    """DeepMind says they extract the Y channel a.k.a. luminance in their Nature version paper.
+    NIPS version paper just says they used grayscale.
+    The doc of `skimage.color.rgb2gray` says it extracts the luminance, so we use it here.
+    https://github.com/deepmind/dqn/blob/master/dqn/Scale.lua#L24
+    """
     def __call__(self, observation):
-        ret = rgb2gray(observation)  # will be ((210, 160), dtype=np.float64)
+        ret = rgb2gray(observation)  # will be ((210, 160), dtype=np.float64), scales [0, 1]
         return ret
 
 
 class Rescale:
+    """DeepMind says they "rescaling and cropping" an 84x84 region in their NIPS version paper,
+    however they just say "rescaling" in the Nature version.
+    We adopt the rescaling, since almost all implementations seems to use rescaling as preprocessing.
+    https://github.com/deepmind/dqn/blob/master/dqn/Scale.lua#L25
+    """
     def __call__(self, observation):
-        ret = resize(observation, output_shape=(110, 84, 1), mode='constant', anti_aliasing=True)  # 210x160 -> 110x84x1
-        return ret[13:-13, :, :]  # crop center (84, 84, 1)
+        ret = resize(observation, output_shape=(84, 84, 1), mode='constant', anti_aliasing=True, order=1)  # 210x160 -> 84x84x1, scales [0, 1]. order=1 means "bilinear".
+        return ret
 
 
 class Float32:

@@ -94,7 +94,7 @@ class VanillaDQNAgent:
 
             # actor
             step = 0 if warming_up else n_steps  # 0 means epsilon = 1
-            state, action, reward, done, is_random, epsilon = self.actor.act(step)
+            state, action, reward, done, is_random, epsilon, q_values = self.actor.act(step)
             reward = np.sign(reward)
             experience = (state, action, reward, done)
             self.replay.push(experience)
@@ -135,7 +135,7 @@ class VanillaDQNAgent:
                     n_test_steps = n_steps
                     n_test_episode_steps = 1
                     while True:
-                        state, action, reward, done, is_random, epsilon = self.test_actor.act(n_steps)
+                        state, action, reward, done, is_random, epsilon, q_values = self.test_actor.act(n_steps)
                         self.test_recorder.record(
                             total_step=n_test_steps, episode=n_episodes, episode_step=n_test_episode_steps,
                             reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=float('nan'), td_error=float('nan'))

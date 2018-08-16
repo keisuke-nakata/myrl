@@ -20,7 +20,7 @@ class QPolicy:
             q_values = self.network(one_batch_state)
         q_values = to_device(CPU_ID, q_values.array)[0]
         action = np.argmax(q_values)
-        return action
+        return action, q_values
 
     def load_parameters(self, path):
         load_hdf5(path, self.network)

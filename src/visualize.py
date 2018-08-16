@@ -3,6 +3,7 @@ import os
 from math import ceil
 
 import click
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -36,6 +37,9 @@ def _visualize(csv_path, out_path=None, window=10):
     ncol = 2
     nrow = ceil(len(smoothed_df.columns) / ncol)
     axes = smoothed_df.plot(subplots=True, sharex=True, grid=True, figsize=(6 * ncol, 2 * nrow), layout=(nrow, ncol))
+
+    axes.item(0).xaxis.set_major_formatter(mpl.ticker.EngFormatter())
+
     fig = axes.item(0).figure
     fig.tight_layout()
     fig.savefig(out_path)

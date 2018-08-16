@@ -35,7 +35,8 @@ class FittedQLearner:
         assert len(batch_y.shape) == 1
         assert batch_q.shape[0] == batch_y.shape[0]
 
-        loss = F.mean(F.huber_loss(batch_q, batch_y, delta=1.0, reduce='no'))
+        # loss = F.mean(F.huber_loss(batch_q, batch_y, delta=1.0, reduce='no'))
+        loss = F.sum(F.huber_loss(batch_q, batch_y, delta=1.0, reduce='no'))
 
         with chainer.no_backprop_mode():
             td_error = F.mean_absolute_error(batch_q, batch_y)

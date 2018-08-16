@@ -71,11 +71,12 @@ class Actor:
         is_random, epsilon = self.explorer(step)
         if is_random:
             action = self.env.action_space.sample()
+            q_values = None
         else:
-            action = self.policy(state)
+            action, q_values = self.policy(state)
         reward, done = self._repeat_action(action)
         self.is_done = done
-        return state, action, reward, done, is_random, epsilon
+        return state, action, reward, done, is_random, epsilon, q_values
 
     @property
     def state(self):
