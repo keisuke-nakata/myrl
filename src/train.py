@@ -8,7 +8,7 @@ import click
 import toml
 
 from myrl import algorithms
-from visualize import _visualize
+from myrl.utils import visualize
 
 
 logger = logging.getLogger(__name__)
@@ -54,9 +54,9 @@ def train(config_path, env_id, device):
         logger.exception('train failed')
         with open(os.path.join(result_dir, 'error.txt'), 'a') as f:
             traceback.print_exc(file=f)
-    finally:
-        _visualize(csv_path)
-        _visualize(test_csv_path)
+    else:
+        visualize(csv_path)
+        visualize(test_csv_path)
 
 
 if __name__ == '__main__':

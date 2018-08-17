@@ -11,7 +11,7 @@ from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, GreedyExplore
 from ..replays import VanillaReplay
 from ..preprocessors import AtariPreprocessor
 from ..env_wrappers import setup_env
-from ..utils import StandardRecorder
+from ..utils import StandardRecorder, visualize
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class VanillaDQNAgent:
         self.replay = VanillaReplay(limit=self.config['replay']['limit'])
 
     def _build_actor(self, env_id, policy, test=False):
-        env = setup_env(env_id, clip=False)
+        env = setup_env(env_id, clip=False, life_episode=not test)
         preprocessor = AtariPreprocessor()
         if test:
             n_noop_at_reset = (0, 0)
@@ -128,6 +128,7 @@ class VanillaDQNAgent:
                     self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'step_history.csv'))
                     with open(os.path.join(result_episode_dir, 'summary.txt'), 'w') as f:
                         print(self.recorder.dump_episodewise_str(), file=f)
+                    visualize(self.recorder.episodewise_csv_path)
 
                     # test_actor's play and save it.
                     logger.info(f'(episode {n_episodes}) test_actor is playing...')
@@ -150,6 +151,7 @@ class VanillaDQNAgent:
                     self.test_recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'test_step_history.csv'))
                     with open(os.path.join(result_episode_dir, 'test_summary.txt'), 'w') as f:
                         print(self.test_recorder.dump_episodewise_str(), file=f)
+                    visualize(self.test_recorder.episodewise_csv_path)
 
                 self.recorder.begin_episode()
                 n_episodes += 1

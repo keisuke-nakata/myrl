@@ -55,7 +55,7 @@ class Actor:
         """This method is one of the two method which calls `env.step()` (the other is `self._reset()`)"""
         assert not self.is_done
         reward = 0
-        for repeat in range(1, self.n_action_repeat + 1):
+        for repeat in range(self.n_action_repeat):
             observation, current_reward, done, info = self.env.step(action)
             self.episode_obses.append(observation)
             reward += current_reward
