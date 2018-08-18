@@ -20,6 +20,7 @@ class Actor:
         self.n_action_repeat = n_action_repeat
 
         self.is_done = True  # this flag will be also used as "require_reset".
+        self.action_meanings = self.env.unwrapped.get_action_meanings()
 
     def _reset(self):
         """this method is the only one which calls `env.reset()`, and one of the two method which calls `env.step()` (the other is `self._repeat_action()`)"""
@@ -76,7 +77,8 @@ class Actor:
             action, q_values = self.policy(state)
         reward, done = self._repeat_action(action)
         self.is_done = done
-        return state, action, reward, done, is_random, epsilon, q_values
+        action_meaning = self.action_meanings[action]
+        return state, action, reward, done, is_random, epsilon, q_values, action_meaning
 
     @property
     def state(self):
