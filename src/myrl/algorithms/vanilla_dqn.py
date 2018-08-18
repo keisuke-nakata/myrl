@@ -81,6 +81,7 @@ class VanillaDQNAgent:
         n_steps = 1
         n_episodes = 1
         n_episode_steps = 1
+        next_test_step = self.config['test_freq_step']
         n_warmup_steps = self.config['n_warmup_steps']
         if n_warmup_steps > 0:
             warming_up = True
@@ -111,7 +112,8 @@ class VanillaDQNAgent:
             # recorder
             self.recorder.record(
                 total_step=n_steps, episode=n_episodes, episode_step=n_episode_steps,
-                reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=loss, td_error=td_error)
+                reward=reward, action=action, action_meaning=action_meaning, is_random=is_random, epsilon=epsilon,
+                loss=loss, td_error=td_error)
 
             # if episode is done...
             if done:
@@ -120,7 +122,9 @@ class VanillaDQNAgent:
                 logger.info(self.recorder.dump_episodewise_str())
 
                 # testing
-                if not warming_up and n_episodes % self.config['test_freq_episode'] == 0:
+                # if not warming_up and n_episodes % self.config['test_freq_episode'] == 0:
+                if not warming_up and n_steps >= next_test_step:
+                    next_test_step += self.config['test_freq_step']
                     # save actor's play.
                     result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:06}')
                     os.makedirs(result_episode_dir, exist_ok=True)
@@ -139,7 +143,8 @@ class VanillaDQNAgent:
                         state, action, reward, done, is_random, epsilon, q_values, action_meaning = self.test_actor.act(n_steps)
                         self.test_recorder.record(
                             total_step=n_test_steps, episode=n_episodes, episode_step=n_test_episode_steps,
-                            reward=reward, action=action, is_random=is_random, epsilon=epsilon, loss=float('nan'), td_error=float('nan'))
+                            reward=reward, action=action, action_meaning=action_meaning, is_random=is_random, epsilon=epsilon,
+                            loss=float('nan'), td_error=float('nan'))
                         n_test_steps += 1
                         n_test_episode_steps += 1
                         if done:
