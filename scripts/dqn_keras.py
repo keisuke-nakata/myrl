@@ -1,10 +1,15 @@
+import random
+
 import gym
 import numpy as np
 from keras.models import Model
-from keras.layers import Input, Conv2D, Dense
+from keras.layers import Input, Conv2D, Dense, Flatten
 from keras.optimizers import Adam
 from keras import backend as K
 import tensorflow as tf
+from skimage.color import rgb2gray
+from skimage.transform import resize
+import imageio
 
 
 def huber_loss(y_true, y_pred, clip_delta=1.0):
@@ -26,6 +31,7 @@ def build_network(n_actions):
     h = Conv2D(32, kernel_size=(8, 8), strides=(4, 4), activation='relu')(state)
     h = Conv2D(64, kernel_size=(4, 4), strides=(2, 2), activation='relu')(h)
     h = Conv2D(64, kernel_size=(3, 3), strides=(1, 1), activation='relu')(h)
+    h = Flatten()(h)
     h = Dense(512, activation='relu')(h)
     out = Dense(n_actions, activation=None)(h)
     network = Model(inputs=state, outputs=out)
@@ -35,21 +41,49 @@ def build_network(n_actions):
     return network
 
 
+def get_epsilon(step):
+    final_exploration_step = 100000
+    final_epsilon = 0.02
+    initial_epsilon = 1.0
+    if step > final_exploration_step:
+        epsilon = final_epsilon
+    else:  # linear annealing
+        epsilon = (final_epsilon - initial_epsilon) / final_exploration_step * step + initial_epsilon
+    return epsilon
+
+
+def phi(obs, last_obs):
+    if last_obs is not None:
+        ret = np.maximum(obs, last_obs)
+    else:
+        ret = obs.copy()
+    ret = rgb2gray(ret)  # will be ((210, 160), dtype=np.float64), scales [0, 1]
+    ret = resize(ret, output_shape=(84, 84, 1), mode='constant', anti_aliasing=True, order=1)  # 210x160 -> 84x84x1, scales [0, 1]. order=1 means "bilinear".
+    ret = (ret * 255).astype(np.uint8)
+    return ret
+
+
 env = gym.make('PongNoFrameskip-v4')
+test_env = gym.make('PongNoFrameskip-v4')
 n_actions = env.action_space.n
 network = build_network(n_actions)
 target_network = build_network(n_actions)
 target_network.set_weights(network.get_weights())
 
-limit = 100_000
+limit = 100000
 replay = [None] * limit
 replay_head = 0
 full = False
 
-initial_epsilon = 1.0
+n_steps = 10000000
+n_warmup = 10000
+# n_warmup = 1_000
+test_episode_freq = 30
+# test_episode_freq = 1
 
 episode_loop = True
 step_loop = True
+warming_up = True
 
 step = 0
 episode = 0
@@ -60,6 +94,7 @@ while episode_loop:  # episode
     episode_raw_obs = []
     episode_obs = []
     episode_reward = 0
+    episode_loss = []
 
     # reset the env
     obs = env.reset()
@@ -79,22 +114,24 @@ while episode_loop:  # episode
         step += 1
         episode_step += 1
 
-        if step > n_warmup:
+        if warming_up and step > n_warmup:
             print('warmup end')
+            warming_up = False
 
         # get current state
         state = episode_obs[-4:]
         while len(state) < 4:
             state = [state[0].copy()] + state
+        state = np.concatenate(state, axis=-1)
 
         # compute q_values and action
         epsilon = get_epsilon(step)
-        if step <= n_warmup or np.random.random() < epsilon:
+        if warming_up or np.random.random() < epsilon:
             is_random = True
         if is_random:
             action = env.action_space.sample()
         else:
-            one_batch_state = np.expand_dims(np.concatenate(state / 255.0, axis=-1), 0)
+            one_batch_state = np.expand_dims(state / 255.0, 0)
             q_values = network.predict_on_batch(one_batch_state)[0]
             action = np.argmax(q_values)
 
@@ -117,7 +154,7 @@ while episode_loop:  # episode
             replay_head = 0
             full = True
 
-        if step > n_warmup and step % 4 == 0:
+        if not warming_up and step % 4 == 0:
             # draw batch
             if full:
                 end = limit
@@ -143,18 +180,67 @@ while episode_loop:  # episode
             batch_y = q_values.copy()
             target_next_q_values = target_network.predict_on_batch(batch_next_state)
             max_target_next_q_values = np.max(target_next_q_values, axis=1)
-            for i, (action, reward, done, max_q) in enumerate(zip(batch_action, batch_reward, batch_done, max_target_next_q_values)):
+            for i, (action, reward, learn_done, max_q) in enumerate(zip(batch_action, batch_reward, batch_done, max_target_next_q_values)):
                 batch_y[i][action] = reward
-                if not done:
+                if not learn_done:
                     batch_y[i][action] += 0.99 * max_q
             loss = network.train_on_batch(batch_state, batch_y)
+            episode_loss.append(loss)
 
-        if step > n_warmup and step % 1000 == 0:
+        if not warming_up and step % 1000 == 0:
             target_network.set_weights(network.get_weights())
 
         if done:
             step_loop = False
-            print(f'episode {episode}, reward {episode_reward}, step {len(episode_obs)}')
+            print('total {:,}, episode {}, reward {}, step {}, epsilon {}, loss {}'.format(step, episode, episode_reward, len(episode_obs), epsilon, np.mean(loss)))
+
+            if episode % test_episode_freq == 0:  # test...
+                imageio.mimwrite('episode{}.gif'.format(episode), episode_raw_obs, fps=60)
+
+                test_episode_raw_obs = []
+                test_episode_obs = []
+                test_episode_reward = 0
+
+                obs = test_env.reset()
+                test_episode_raw_obs.append(obs)
+                n_random_actions = random.randint(0, 30)
+                for _ in range(n_random_actions):
+                    obs, reward, done, info = test_env.step(0)
+                    test_episode_reward += reward
+                    test_episode_raw_obs.append(obs)
+                if len(test_episode_raw_obs) == 1:
+                    last_obs = None
+                else:
+                    last_obs = test_episode_raw_obs[-2]
+                test_episode_obs.append(phi(obs, last_obs))
+
+                while True:
+                    # get current state
+                    state = test_episode_obs[-4:]
+                    while len(state) < 4:
+                        state = [state[0].copy()] + state
+                    state = np.concatenate(state, axis=-1)
+
+                    # compute q_values and action
+                    one_batch_state = np.expand_dims(state / 255.0, 0)
+                    q_values = network.predict_on_batch(one_batch_state)[0]
+                    action = np.argmax(q_values)
+
+                    # interact with the env
+                    reward = 0
+                    for _ in range(4):
+                        obs, tmp_reward, done, info = test_env.step(action)
+                        reward += tmp_reward
+                        test_episode_raw_obs.append(obs)
+                        test_episode_reward += tmp_reward
+                        if done:
+                            break
+                    test_episode_obs.append(phi(episode_raw_obs[-1], episode_raw_obs[-2]))
+
+                    if done:
+                        print('(test) reward {}, step {}'.format(test_episode_reward, len(test_episode_obs)))
+                        imageio.mimwrite('test_episode{}.gif'.format(episode), test_episode_raw_obs, fps=60)
+                        break
 
         if step > n_steps:
             step_loop = False
