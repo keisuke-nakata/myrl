@@ -65,7 +65,6 @@ def parse_agent(agent):
 
 def main():
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--env', type=str, default='BreakoutNoFrameskip-v4')
     parser.add_argument('--env', type=str, default='PongNoFrameskip-v4')
     parser.add_argument('--outdir', type=str, default='results',
                         help='Directory path to save output files.'
@@ -73,7 +72,6 @@ def main():
     parser.add_argument('--seed', type=int, default=0,
                         help='Random seed [0, 2 ** 31)')
     parser.add_argument('--gpu', type=int, default=0)
-    # parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--demo', action='store_true', default=False)
     parser.add_argument('--load', type=str, default=None)
     parser.add_argument('--use-sdl', action='store_true', default=False)

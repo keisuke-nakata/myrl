@@ -61,8 +61,8 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
 
             if done or episode_len == max_episode_len or t == steps:
                 agent.stop_episode_and_train(obs, r, done=done)
-                logger.info('outdir:%s step:%s episode:%s R:%s',
-                            outdir, t, episode_idx, episode_r)
+                epsilon = agent.explorer.compute_epsilon(agent.t)
+                logger.info('outdir:{} step:{:,} episode:{} R:{} episode_step:{} epsilon:{}'.format(outdir, t, episode_idx, episode_r, episode_len, epsilon))
                 logger.info('statistics:%s', agent.get_statistics())
                 if evaluator is not None:
                     evaluator.evaluate_if_necessary(
