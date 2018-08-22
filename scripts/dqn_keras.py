@@ -37,7 +37,8 @@ def build_network(n_actions):
     network = Model(inputs=state, outputs=out)
 
     optimizer = Adam(lr=1e-4)
-    network.compile(optimizer=optimizer, loss=sum_huber_loss, metrics=['mae'], loss_weights=[32])
+    # network.compile(optimizer=optimizer, loss=sum_huber_loss, metrics=['mae'], loss_weights=[32])
+    network.compile(optimizer=optimizer, loss=sum_huber_loss, metrics=['mae'])
     return network
 
 
@@ -184,15 +185,16 @@ while episode_loop:  # episode
                 batch_y[i][action] = reward
                 if not learn_done:
                     batch_y[i][action] += 0.99 * max_q
-            loss = network.train_on_batch(batch_state, batch_y)
+            loss, td_error = network.train_on_batch(batch_state, batch_y)
             episode_loss.append(loss)
 
         if not warming_up and step % 1000 == 0:
             target_network.set_weights(network.get_weights())
+            print('synced target network.')
 
         if done:
             step_loop = False
-            print('total {:,}, episode {}, reward {}, step {}, epsilon {}, loss {}'.format(step, episode, episode_reward, len(episode_obs), epsilon, np.mean(loss)))
+            print('total {:,}, episode {}, reward {}, step {}, epsilon {}, loss {}'.format(step, episode, episode_reward, len(episode_obs), epsilon, np.mean(episode_loss)))
 
             if episode % test_episode_freq == 0:  # test...
                 imageio.mimwrite('episode{}.gif'.format(episode), episode_raw_obs, fps=60)

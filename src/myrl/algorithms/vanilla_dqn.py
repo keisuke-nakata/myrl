@@ -164,6 +164,7 @@ class VanillaDQNAgent:
 
                 # preemptive timer...
                 if self.recorder.timer.elapsed > 60 * 60 * 20:  # 20 hours
+                    logger.info('Timeup. Training end.')
                     break
             else:  # if episode continues
                 n_episode_steps += 1
