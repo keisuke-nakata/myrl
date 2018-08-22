@@ -66,7 +66,7 @@ def parse_agent(agent):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='PongNoFrameskip-v4')
-    parser.add_argument('--outdir', type=str, default='results',
+    parser.add_argument('--outdir', type=str, default='chainerrl-results-remove-unused',
                         help='Directory path to save output files.'
                              ' If it does not exist, it will be created.')
     parser.add_argument('--seed', type=int, default=0,
@@ -93,16 +93,11 @@ def main():
     parser.add_argument('--update-interval', type=int, default=4)
     parser.add_argument('--activation', type=str, default='relu')
     parser.add_argument('--eval-n-runs', type=int, default=10)
-    parser.add_argument('--no-clip-delta',
-                        dest='clip_delta', action='store_false')
-    parser.set_defaults(clip_delta=True)
     parser.add_argument('--agent', type=str, default='DQN',
                         choices=['DQN', 'DoubleDQN', 'PAL'])
     parser.add_argument('--logging-level', type=int, default=20,
                         help='Logging level. 10:DEBUG, 20:INFO etc.')
-    parser.add_argument('--render', action='store_true', default=False,
-                        help='Render env states in a GUI window.')
-    parser.add_argument('--monitor', action='store_true', default=False,
+    parser.add_argument('--no-monitor', action='store_true', default=False,
                         help='Monitor env. Videos and additional information'
                              ' are saved as output files.')
     args = parser.parse_args()
@@ -128,12 +123,10 @@ def main():
             episode_life=not test,
             clip_rewards=not test)
         env.seed(int(env_seed))
-        if args.monitor:
+        if not args.no_monitor:
             env = gym.wrappers.Monitor(
                 env, args.outdir,
                 mode='evaluation' if test else 'training')
-        if args.render:
-            misc.env_modifiers.make_rendered(env)
         return env
 
     env = make_env(test=False)
@@ -174,9 +167,7 @@ def main():
     agent = Agent(q_func, opt, rbuf, gpu=args.gpu, gamma=0.99,
                   explorer=explorer, replay_start_size=args.replay_start_size,
                   target_update_interval=args.target_update_interval,
-                  clip_delta=args.clip_delta,
                   update_interval=args.update_interval,
-                  batch_accumulator='sum',
                   phi=phi)
 
     if args.load:

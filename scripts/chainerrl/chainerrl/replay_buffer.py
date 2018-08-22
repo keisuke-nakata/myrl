@@ -404,23 +404,16 @@ class ReplayUpdater(object):
             replay_start_size, skip update
         batchsize (int): Minibatch size
         update_interval (int): Model update interval in step
-        n_times_update (int): Number of repetition of update
-        episodic_update (bool): Use full episodes for update if set True
-        episodic_update_len (int or None): Subsequences of this length are used
-            for update if set int and episodic_update=True
     """
 
-    def __init__(self, replay_buffer, update_func, batchsize, episodic_update,
-                 n_times_update, replay_start_size, update_interval,
-                 episodic_update_len=None):
+    def __init__(self, replay_buffer, update_func, batchsize,
+                 replay_start_size, update_interval,
+                 ):
 
         assert batchsize <= replay_start_size
         self.replay_buffer = replay_buffer
         self.update_func = update_func
         self.batchsize = batchsize
-        self.episodic_update = episodic_update
-        self.episodic_update_len = episodic_update_len
-        self.n_times_update = n_times_update
         self.replay_start_size = replay_start_size
         self.update_interval = update_interval
 
@@ -428,18 +421,8 @@ class ReplayUpdater(object):
         if len(self.replay_buffer) < self.replay_start_size:
             return
 
-        if (self.episodic_update
-                and self.replay_buffer.n_episodes < self.batchsize):
-            return
-
         if iteration % self.update_interval != 0:
             return
 
-        for _ in range(self.n_times_update):
-            if self.episodic_update:
-                episodes = self.replay_buffer.sample_episodes(
-                    self.batchsize, self.episodic_update_len)
-                self.update_func(episodes)
-            else:
-                transitions = self.replay_buffer.sample(self.batchsize)
-                self.update_func(transitions)
+        transitions = self.replay_buffer.sample(self.batchsize)
+        self.update_func(transitions)
