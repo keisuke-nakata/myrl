@@ -70,7 +70,7 @@ INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 ste
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', 0.07188222829223187), ('average_loss', 0.37338162222976773)]
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:64988 episode:70 R:-20.0
 
-...step 1,000,000 あたり
+...step 100,000 あたり
 
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:97270 episode:105 R:-20.0
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', 0.047932409475369676), ('average_loss', 0.2056436183022446)]
@@ -106,7 +106,7 @@ INFO:chainerrl.experiments.train_agent:statistics:[('average_q', 0.0463097721283
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:106706 episode:115 R:-21.0
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', 0.04823072019935384), ('average_loss', 0.12744395918543439)]
 
-...step 2,000,000 あたり
+...step 200,000 あたり
 
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:196681 episode:211 R:-21.0
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.033619968057465414), ('average_loss', 0.0669829019745481)]
@@ -146,7 +146,7 @@ INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 ste
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.041249805031570067), ('average_loss', 0.07425110242590169)]
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:209020 episode:224 R:-19.0
 
-... step 3,000,000 あたり
+... step 300,000 あたり
 
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.15369398106089657), ('average_loss', 0.12575970922143984)]
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:296409 episode:316 R:-20.0
@@ -184,3 +184,40 @@ INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.155839544222
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:306675 episode:327 R:-21.0
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.14565451844967822), ('average_loss', 0.1207372680797653)]
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:307707 episode:328 R:-21.0
+
+...step 600,000 あたり
+
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:595583 episode:590 R:-20.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.18507276872214473), ('average_loss', 0.11332209523248846)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:596949 episode:591 R:-20.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.17712068047759552), ('average_loss', 0.1049793205621857)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:598261 episode:592 R:-19.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.19396102445883057), ('average_loss', 0.0947444880673437)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:599293 episode:593 R:-20.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.22264340226632492), ('average_loss', 0.09591370648222237)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:600704 episode:594 R:-17.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.2003388463373015), ('average_loss', 0.11184393915381238)]
+INFO:chainerrl.experiments.train_agent:test episode: 0 R: -20.0
+INFO:chainerrl.experiments.train_agent:test episode: 1 R: -16.0
+INFO:chainerrl.experiments.train_agent:test episode: 2 R: -18.0
+INFO:chainerrl.experiments.train_agent:test episode: 3 R: -16.0
+INFO:chainerrl.experiments.train_agent:test episode: 4 R: -19.0
+INFO:chainerrl.experiments.train_agent:test episode: 5 R: -15.0
+INFO:chainerrl.experiments.train_agent:test episode: 6 R: -15.0
+INFO:chainerrl.experiments.train_agent:test episode: 7 R: -19.0
+INFO:chainerrl.experiments.train_agent:test episode: 8 R: -19.0
+INFO:chainerrl.experiments.train_agent:test episode: 9 R: -19.0
+INFO:chainerrl.experiments.train_agent:The best score is updated -18.5 -> -17.6
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:602259 episode:595 R:-19.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.15514070044986922), ('average_loss', 0.10587467268088373)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:603856 episode:596 R:-16.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.18991799304106846), ('average_loss', 0.10700795088102186)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:605216 episode:597 R:-17.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.1864329848382274), ('average_loss', 0.1180624615348216)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:606227 episode:598 R:-20.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.22768085269807029), ('average_loss', 0.11425534661380711)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:607516 episode:599 R:-19.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.17534700941714648), ('average_loss', 0.10446626261820534)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:608738 episode:600 R:-19.0
+INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.19692074802203696), ('average_loss', 0.10087595038507037)]
+INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:610181 episode:601 R:-19.0
