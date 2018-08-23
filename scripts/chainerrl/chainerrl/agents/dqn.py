@@ -9,20 +9,20 @@ standard_library.install_aliases()  # NOQA
 import copy
 from logging import getLogger
 
+import numpy as np
 import chainer
 from chainer import cuda
 import chainer.functions as F
 
 from chainerrl import agent
-from chainerrl.misc.batch_states import batch_states
-from chainerrl.misc.copy_param import synchronize_parameters
-from chainerrl.recurrent import Recurrent
-from chainerrl.recurrent import state_reset
-from chainerrl.replay_buffer import batch_experiences
-from chainerrl.replay_buffer import ReplayUpdater
 
 
-class DQN(agent.AttributeSavingMixin, agent.Agent):
+def phi(x):
+    # Feature extractor
+    return np.asarray(x, dtype=np.float32) / 255
+
+
+class DQN(agent.AttributeSavingMixin):
     """Deep Q-Network algorithm.
 
     Args:
@@ -37,24 +37,11 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
         minibatch_size (int): Minibatch size
         update_interval (int): Model update interval in step
         target_update_interval (int): Target model update interval in step
-        phi (callable): Feature extractor applied to observations
-        target_update_method (str): 'hard' or 'soft'.
-        soft_update_tau (float): Tau of soft target update.
         average_q_decay (float): Decay rate of average Q, only used for
             recording statistics
         average_loss_decay (float): Decay rate of average loss, only used for
             recording statistics
         logger (Logger): Logger used
-        batch_states (callable): method which makes a batch of observations.
-            default is `chainerrl.misc.batch_states.batch_states`
-
-
-
-    q_func, opt, rbuf, gpu=args.gpu, gamma=0.99,
-                  explorer=explorer, replay_start_size=args.replay_start_size,
-                  target_update_interval=args.target_update_interval,
-                  update_interval=args.update_interval,
-                  phi=phi
     """
 
     saved_attributes = ('model', 'target_model', 'optimizer')
@@ -63,13 +50,9 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
                  explorer, gpu=None, replay_start_size=50000,
                  minibatch_size=32, update_interval=1,
                  target_update_interval=10000,
-                 phi=lambda x: x,
-                 target_update_method='hard',
-                 soft_update_tau=1e-2,
                  average_q_decay=0.999,
                  average_loss_decay=0.99,
-                 logger=getLogger(__name__),
-                 batch_states=batch_states):
+                 logger=getLogger(__name__)):
         self.model = q_function
         self.q_function = q_function  # For backward compatibility
 
@@ -84,19 +67,11 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
         self.explorer = explorer
         self.gpu = gpu
         self.target_update_interval = target_update_interval
-        self.phi = phi
-        self.target_update_method = target_update_method
-        self.soft_update_tau = soft_update_tau
         self.logger = logger
-        self.batch_states = batch_states
-        update_func = self.update
-        self.replay_updater = ReplayUpdater(
-            replay_buffer=replay_buffer,
-            update_func=update_func,
-            batchsize=minibatch_size,
-            replay_start_size=replay_start_size,
-            update_interval=update_interval,
-        )
+
+        self.minibatch_size = minibatch_size
+        self.replay_start_size = replay_start_size
+        self.update_interval = update_interval
 
         self.t = 0
         self.last_state = None
@@ -122,11 +97,16 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
 
             self.target_model.__call__ = call_test
         else:
-            synchronize_parameters(
-                src=self.model,
-                dst=self.target_model,
-                method=self.target_update_method,
-                tau=self.soft_update_tau)
+            target_params = dict(self.target_model.namedparams())
+            for param_name, param in self.model.namedparams():
+                if target_params[param_name].data is None:
+                    raise TypeError(
+                        'self.target_model parameter {} is None. Maybe the model params are '
+                        'not initialized.\nPlease try to forward dummy input '
+                        'beforehand to determine parameter shape of the model.'.format(
+                            param_name))
+                target_params[param_name].data[:] = param.data
+            print('synced target model.')
 
     def update(self, experiences):
         """Update the model from experiences
@@ -143,34 +123,14 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
         Returns:
           None
         """
-
-        exp_batch = batch_experiences(experiences, xp=self.xp, phi=self.phi,
-                                      batch_states=self.batch_states)
-        loss = self._compute_loss(exp_batch, self.gamma)
-
-        # Update stats
-        self.average_loss *= self.average_loss_decay
-        self.average_loss += (1 - self.average_loss_decay) * float(loss.data)
-
-        self.model.cleargrads()
-        loss.backward()
-        self.optimizer.update()
-
-    def input_initial_batch_to_target_model(self, batch):
-        self.target_model(batch['state'])
-
-    def _compute_target_values(self, exp_batch, gamma):
-        batch_next_state = exp_batch['next_state']
-
-        target_next_qout = self.target_model(batch_next_state)
-        next_q_max = target_next_qout.max
-
-        batch_rewards = exp_batch['reward']
-        batch_terminal = exp_batch['is_state_terminal']
-
-        return batch_rewards + self.gamma * (1.0 - batch_terminal) * next_q_max
-
-    def _compute_y_and_t(self, exp_batch, gamma):
+        exp_batch = {
+            'state': self.xp.asarray([phi(elem['state']) for elem in experiences]),
+            'action': self.xp.asarray([elem['action'] for elem in experiences]),
+            'reward': self.xp.asarray([elem['reward'] for elem in experiences], dtype=np.float32),
+            'next_state': self.xp.asarray([phi(elem['next_state']) for elem in experiences]),
+            'next_action': self.xp.asarray([elem['next_action'] for elem in experiences]),
+            'is_state_terminal': self.xp.asarray([elem['is_state_terminal'] for elem in experiences], dtype=np.float32)
+        }
         batch_size = exp_batch['reward'].shape[0]
 
         # Compute Q-values for current states
@@ -183,30 +143,33 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
             batch_actions), (batch_size, 1))
 
         with chainer.no_backprop_mode():
-            batch_q_target = F.reshape(
-                self._compute_target_values(exp_batch, gamma),
-                (batch_size, 1))
+            batch_next_state = exp_batch['next_state']
 
-        return batch_q, batch_q_target
+            target_next_qout = self.target_model(batch_next_state)
+            next_q_max = target_next_qout.max
 
-    def _compute_loss(self, exp_batch, gamma):
-        """Compute the Q-learning loss for a batch of experiences
+            batch_rewards = exp_batch['reward']
+            batch_terminal = exp_batch['is_state_terminal']
 
+            batch_q_target = F.reshape(batch_rewards + self.gamma * (1.0 - batch_terminal) * next_q_max, (batch_size, 1))
 
-        Args:
-          experiences (list): see update()'s docstring
-          gamma (float): discount factor
-        Returns:
-          loss
-        """
-        y, t = self._compute_y_and_t(exp_batch, gamma)
-        return F.sum(F.huber_loss(y, t, delta=1.0))
+        loss = F.sum(F.huber_loss(batch_q, batch_q_target, delta=1.0))
+
+        # Update stats
+        self.average_loss *= self.average_loss_decay
+        self.average_loss += (1 - self.average_loss_decay) * float(loss.data)
+
+        self.model.cleargrads()
+        loss.backward()
+        self.optimizer.update()
+
+    def input_initial_batch_to_target_model(self, batch):
+        self.target_model(batch['state'])
 
     def act(self, obs):
         with chainer.using_config('train', False):
             with chainer.no_backprop_mode():
-                action_value = self.model(
-                    self.batch_states([obs], self.xp, self.phi))
+                action_value = self.model(self.xp.asarray([phi(obs)]))
                 q = float(action_value.max.data)
                 action = cuda.to_cpu(action_value.greedy_actions.data)[0]
 
@@ -221,11 +184,9 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
 
         with chainer.using_config('train', False):
             with chainer.no_backprop_mode():
-                action_value = self.model(
-                    self.batch_states([obs], self.xp, self.phi))
+                action_value = self.model(self.xp.asarray([phi(obs)]))
                 q = float(action_value.max.data)
-                greedy_action = cuda.to_cpu(action_value.greedy_actions.data)[
-                    0]
+                greedy_action = cuda.to_cpu(action_value.greedy_actions.data)[0]
 
         # Update stats
         self.average_q *= self.average_q_decay
@@ -255,7 +216,13 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
         self.last_state = obs
         self.last_action = action
 
-        self.replay_updater.update_if_necessary(self.t)
+        if len(self.replay_buffer) < self.replay_start_size:
+            pass
+        elif self.t % self.update_interval != 0:
+            pass
+        else:
+            transitions = self.replay_buffer.sample(self.minibatch_size)
+            self.update(transitions)
 
         self.logger.debug('t:%s r:%s a:%s', self.t, reward, action)
 
@@ -284,9 +251,6 @@ class DQN(agent.AttributeSavingMixin, agent.Agent):
     def stop_episode(self):
         self.last_state = None
         self.last_action = None
-        if isinstance(self.model, Recurrent):
-            self.model.reset_state()
-        self.replay_buffer.stop_current_episode()
 
     def get_statistics(self):
         return [

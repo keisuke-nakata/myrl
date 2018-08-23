@@ -19,69 +19,85 @@ import chainerrl
 from chainerrl.action_value import DiscreteActionValue
 from chainerrl import agents
 from chainerrl import experiments
+from chainerrl.experiments.evaluator import Evaluator, save_agent
 from chainerrl import explorers
 from chainerrl import links
 from chainerrl import misc
-from chainerrl.q_functions import DuelingDQN
+from chainerrl.misc.makedirs import makedirs
 from chainerrl import replay_buffer
 
 import atari_wrappers
 
 
-def parse_activation(activation_str):
-    if activation_str == 'relu':
-        return F.relu
-    elif activation_str == 'elu':
-        return F.elu
-    elif activation_str == 'lrelu':
-        return F.leaky_relu
-    else:
-        raise RuntimeError(
-            'Not supported activation: {}'.format(activation_str))
+def train_agent(agent, env, steps, outdir, max_episode_len=None,
+                step_offset=0, evaluator=None,
+                step_hooks=[], logger=None):
+    episode_r = 0
+    episode_idx = 0
 
+    # o_0, r_0
+    obs = env.reset()
+    r = 0
 
-def parse_arch(arch, n_actions, activation):
-    if arch == 'nature':
-        return links.Sequence(
-            links.NatureDQNHead(activation=activation),
-            L.Linear(512, n_actions),
-            DiscreteActionValue)
-    elif arch == 'nips':
-        return links.Sequence(
-            links.NIPSDQNHead(activation=activation),
-            L.Linear(256, n_actions),
-            DiscreteActionValue)
-    elif arch == 'dueling':
-        return DuelingDQN(n_actions)
-    else:
-        raise RuntimeError('Not supported architecture: {}'.format(arch))
+    t = step_offset
+    if hasattr(agent, 't'):
+        agent.t = step_offset
 
+    episode_len = 0
+    try:
+        while t < steps:
 
-def parse_agent(agent):
-    return {'DQN': agents.DQN,
-            'DoubleDQN': agents.DoubleDQN,
-            'PAL': agents.PAL}[agent]
+            # a_t
+            action = agent.act_and_train(obs, r)
+            # o_{t+1}, r_{t+1}
+            obs, r, done, info = env.step(action)
+            t += 1
+            episode_r += r
+            episode_len += 1
+
+            for hook in step_hooks:
+                hook(env, agent, t)
+
+            if done or episode_len == max_episode_len or t == steps:
+                agent.stop_episode_and_train(obs, r, done=done)
+                epsilon = agent.explorer.compute_epsilon(agent.t)
+                logger.info('outdir:{} step:{:,} episode:{} R:{} episode_step:{} epsilon:{}'.format(outdir, t, episode_idx, episode_r, episode_len, epsilon))
+                logger.info('statistics:%s', agent.get_statistics())
+                if evaluator is not None:
+                    evaluator.evaluate_if_necessary(t=t, episodes=episode_idx + 1)
+                if t == steps:
+                    break
+                # Start a new episode
+                episode_r = 0
+                episode_idx += 1
+                episode_len = 0
+                obs = env.reset()
+                r = 0
+
+    except (Exception, KeyboardInterrupt):
+        # Save the current model before being killed
+        save_agent(agent, t, outdir, logger, suffix='_except')
+        raise
+
+    # Save the final model
+    save_agent(agent, t, outdir, logger, suffix='_finish')
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='PongNoFrameskip-v4')
-    parser.add_argument('--outdir', type=str, default='chainerrl-results-remove-unused',
+    parser.add_argument('--outdir', type=str, default='chainerrl-results-unrolled2',
                         help='Directory path to save output files.'
                              ' If it does not exist, it will be created.')
     parser.add_argument('--seed', type=int, default=0,
                         help='Random seed [0, 2 ** 31)')
     parser.add_argument('--gpu', type=int, default=0)
-    parser.add_argument('--demo', action='store_true', default=False)
     parser.add_argument('--load', type=str, default=None)
     parser.add_argument('--use-sdl', action='store_true', default=False)
     parser.add_argument('--final-exploration-frames',
                         type=int, default=10 ** 6)
     parser.add_argument('--final-epsilon', type=float, default=0.1)
     parser.add_argument('--eval-epsilon', type=float, default=0.05)
-    parser.add_argument('--noisy-net-sigma', type=float, default=None)
-    parser.add_argument('--arch', type=str, default='nature',
-                        choices=['nature', 'nips', 'dueling'])
     parser.add_argument('--steps', type=int, default=10 ** 7)
     parser.add_argument('--max-episode-len', type=int,
                         default=5 * 60 * 60 // 4,  # 5 minutes with 60/4 fps
@@ -91,10 +107,7 @@ def main():
                         type=int, default=10 ** 4)
     parser.add_argument('--eval-interval', type=int, default=10 ** 5)
     parser.add_argument('--update-interval', type=int, default=4)
-    parser.add_argument('--activation', type=str, default='relu')
     parser.add_argument('--eval-n-runs', type=int, default=10)
-    parser.add_argument('--agent', type=str, default='DQN',
-                        choices=['DQN', 'DoubleDQN', 'PAL'])
     parser.add_argument('--logging-level', type=int, default=20,
                         help='Logging level. 10:DEBUG, 20:INFO etc.')
     parser.add_argument('--no-monitor', action='store_true', default=False,
@@ -118,28 +131,21 @@ def main():
     def make_env(test):
         # Use different random seeds for train and test envs
         env_seed = test_seed if test else train_seed
-        env = atari_wrappers.wrap_deepmind(
-            atari_wrappers.make_atari(args.env),
-            episode_life=not test,
-            clip_rewards=not test)
+        atari_env = atari_wrappers.make_atari(args.env)
+        env = atari_wrappers.wrap_deepmind(atari_env, episode_life=not test, clip_rewards=not test)
         env.seed(int(env_seed))
         if not args.no_monitor:
-            env = gym.wrappers.Monitor(
-                env, args.outdir,
-                mode='evaluation' if test else 'training')
+            env = gym.wrappers.Monitor(env, args.outdir, mode='evaluation' if test else 'training')
         return env
 
     env = make_env(test=False)
     eval_env = make_env(test=True)
 
     n_actions = env.action_space.n
-    activation = parse_activation(args.activation)
-    q_func = parse_arch(args.arch, n_actions, activation)
-
-    if args.noisy_net_sigma is not None:
-        links.to_factorized_noisy(q_func)
-        # Turn off explorer
-        explorer = explorers.Greedy()
+    q_func = links.Sequence(
+        links.NatureDQNHead(activation=F.relu),
+        L.Linear(512, n_actions),
+        DiscreteActionValue)
 
     # Draw the computational graph and save it in the output directory.
     chainerrl.misc.draw_computational_graph(
@@ -147,8 +153,7 @@ def main():
         os.path.join(args.outdir, 'model'))
 
     # Use the same hyper parameters as the Nature paper's
-    opt = optimizers.RMSpropGraves(
-        lr=2.5e-4, alpha=0.95, momentum=0.0, eps=1e-2)
+    opt = optimizers.RMSpropGraves(lr=2.5e-4, alpha=0.95, momentum=0.0, eps=1e-2)
 
     opt.setup(q_func)
 
@@ -159,40 +164,44 @@ def main():
         args.final_exploration_frames,
         lambda: np.random.randint(n_actions))
 
-    def phi(x):
-        # Feature extractor
-        return np.asarray(x, dtype=np.float32) / 255
-
-    Agent = parse_agent(args.agent)
-    agent = Agent(q_func, opt, rbuf, gpu=args.gpu, gamma=0.99,
-                  explorer=explorer, replay_start_size=args.replay_start_size,
-                  target_update_interval=args.target_update_interval,
-                  update_interval=args.update_interval,
-                  phi=phi)
+    agent = agents.DQN(q_func, opt, rbuf, gpu=args.gpu, gamma=0.99,
+                       explorer=explorer, replay_start_size=args.replay_start_size,
+                       target_update_interval=args.target_update_interval,
+                       update_interval=args.update_interval)
 
     if args.load:
         agent.load(args.load)
-
-    if args.demo:
-        eval_stats = experiments.eval_performance(
-            env=eval_env,
-            agent=agent,
-            n_runs=args.eval_n_runs)
-        print('n_runs: {} mean: {} median: {} stdev {}'.format(
-            args.eval_n_runs, eval_stats['mean'], eval_stats['median'],
-            eval_stats['stdev']))
     else:
         # In testing DQN, randomly select 5% of actions
-        eval_explorer = explorers.ConstantEpsilonGreedy(
-            args.eval_epsilon, lambda: np.random.randint(n_actions))
-        experiments.train_agent_with_evaluation(
-            agent=agent, env=env, steps=args.steps,
-            eval_n_runs=args.eval_n_runs, eval_interval=args.eval_interval,
-            outdir=args.outdir, eval_explorer=eval_explorer,
-            save_best_so_far_agent=False,
+        eval_explorer = explorers.ConstantEpsilonGreedy(args.eval_epsilon, lambda: np.random.randint(n_actions))
+
+        logger = logging.getLogger(__name__)
+
+        makedirs(args.outdir, exist_ok=True)
+
+        if eval_env is None:
+            eval_env = env
+
+        eval_max_episode_len = args.max_episode_len
+
+        evaluator = Evaluator(agent=agent,
+                              n_runs=args.eval_n_runs,
+                              eval_interval=args.eval_interval, outdir=args.outdir,
+                              max_episode_len=eval_max_episode_len,
+                              explorer=eval_explorer,
+                              env=eval_env,
+                              step_offset=0,
+                              save_best_so_far_agent=False,
+                              logger=logger,
+                              )
+
+        train_agent(
+            agent, env, args.steps, args.outdir,
             max_episode_len=args.max_episode_len,
-            eval_env=eval_env,
-        )
+            step_offset=0,
+            evaluator=evaluator,
+            step_hooks=[],
+            logger=logger)
 
 
 if __name__ == '__main__':
