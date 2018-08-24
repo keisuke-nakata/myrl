@@ -68,6 +68,8 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
     if hasattr(agent, 't'):
         agent.t = step_offset
 
+    next_eval_t = eval_interval
+
     episode_len = 0
     try:
         while t < steps:
@@ -106,7 +108,8 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
                 logger.info('outdir:{} step:{:,} episode:{} R:{} episode_step:{} epsilon:{}'.format(outdir, t, episode_idx, episode_r, episode_len, epsilon))
                 logger.info('statistics:%s', agent.get_statistics())
 
-                if t % eval_interval == 0:
+                if t > next_eval_t:
+                    next_eval_t += eval_interval
                     imageio.mimwrite(os.path.join(outdir, 'episode{}.mp4'.format(episode_idx)), episode_raw_obs, fps=60)
 
                     # eval run
@@ -196,13 +199,11 @@ def main():
     parser.add_argument('--outdir', type=str, default='chainerrl-results-envfix',
                         help='Directory path to save output files.'
                              ' If it does not exist, it will be created.')
-    parser.add_argument('--seed', type=int, default=0,
-                        help='Random seed [0, 2 ** 31)')
+    parser.add_argument('--seed', type=int, default=0, help='Random seed [0, 2 ** 31)')
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--load', type=str, default=None)
     parser.add_argument('--use-sdl', action='store_true', default=False)
-    parser.add_argument('--final-exploration-frames',
-                        type=int, default=10 ** 6)
+    parser.add_argument('--final-exploration-frames', type=int, default=10 ** 6)
     parser.add_argument('--final-epsilon', type=float, default=0.1)
     parser.add_argument('--eval-epsilon', type=float, default=0.05)
     parser.add_argument('--steps', type=int, default=10 ** 7)
@@ -210,16 +211,11 @@ def main():
                         default=5 * 60 * 60 // 4,  # 5 minutes with 60/4 fps
                         help='Maximum number of steps for each episode.')
     parser.add_argument('--replay-start-size', type=int, default=5 * 10 ** 4)
-    parser.add_argument('--target-update-interval',
-                        type=int, default=10 ** 4)
+    parser.add_argument('--target-update-interval', type=int, default=10 ** 4)
     parser.add_argument('--eval-interval', type=int, default=10 ** 5)
     parser.add_argument('--update-interval', type=int, default=4)
     parser.add_argument('--eval-n-runs', type=int, default=10)
-    parser.add_argument('--logging-level', type=int, default=20,
-                        help='Logging level. 10:DEBUG, 20:INFO etc.')
-    parser.add_argument('--no-monitor', action='store_true', default=False,
-                        help='Monitor env. Videos and additional information'
-                             ' are saved as output files.')
+    parser.add_argument('--logging-level', type=int, default=20, help='Logging level. 10:DEBUG, 20:INFO etc.')
     args = parser.parse_args()
 
     import logging
