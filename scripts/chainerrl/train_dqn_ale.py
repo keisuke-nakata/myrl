@@ -7,6 +7,7 @@ from future import standard_library
 standard_library.install_aliases()  # NOQA
 import argparse
 import os
+import random
 
 import gym
 gym.undo_logger_setup()  # NOQA
@@ -14,29 +15,53 @@ from chainer import functions as F
 from chainer import links as L
 from chainer import optimizers
 import numpy as np
+from skimage.color import rgb2gray
+from skimage.transform import resize
+import imageio
 
 import chainerrl
 from chainerrl.action_value import DiscreteActionValue
 from chainerrl import agents
 from chainerrl import experiments
-from chainerrl.experiments.evaluator import Evaluator, save_agent
+from chainerrl.experiments.evaluator import save_agent
+# from chainerrl.experiments.evaluator import Evaluator, save_agent
 from chainerrl import explorers
 from chainerrl import links
 from chainerrl import misc
-from chainerrl.misc.makedirs import makedirs
 from chainerrl import replay_buffer
 
-import atari_wrappers
+
+def phi(obs, last_obs):
+    if last_obs is None:
+        ret = obs
+    else:
+        ret = np.maximum(obs, last_obs)
+    ret = rgb2gray(ret)  # will be ((210, 160), dtype=np.float64), scales [0, 1]
+    ret = resize(ret, output_shape=(84, 84, 1), mode='constant', anti_aliasing=True, order=1)  # 210x160 -> 84x84x1, scales [0, 1]. order=1 means "bilinear".
+    ret = ret.astype(np.float32)
+    return ret
 
 
 def train_agent(agent, env, steps, outdir, max_episode_len=None,
-                step_offset=0, evaluator=None,
-                step_hooks=[], logger=None):
+                step_offset=0, eval_env=None, logger=None, eval_interval=None, eval_n_runs=None, eval_epsilon=None):
     episode_r = 0
     episode_idx = 0
 
     # o_0, r_0
     obs = env.reset()
+    done = False
+    episode_raw_obs = [obs]
+    n_random_actions = random.randint(0, 30)
+    for _ in range(n_random_actions):
+        observation, reward, done, info = env.step(0)
+        episode_raw_obs.append(observation)
+    assert not done
+    if len(episode_raw_obs) == 1:
+        last_obs = None
+    else:
+        last_obs = episode_raw_obs[-2]
+    episode_obs = [phi(episode_raw_obs[-1], last_obs)]
+
     r = 0
 
     t = step_offset
@@ -46,25 +71,50 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
     episode_len = 0
     try:
         while t < steps:
+            # get current state
+            state = episode_obs[-4:]
+            while len(state) < 4:
+                state = [state[0].copy()] + state
+            state = np.transpose(np.concatenate(state, axis=-1), (2, 0, 1))
 
             # a_t
-            action = agent.act_and_train(obs, r)
+            action = agent.act_and_train(state, r)
             # o_{t+1}, r_{t+1}
-            obs, r, done, info = env.step(action)
+            r = 0
+            for _ in range(4):
+                obs, tmp_r, done, info = env.step(action)
+                episode_raw_obs.append(obs)
+                r += tmp_r
+                if done:
+                    break
+            episode_obs.append(phi(episode_raw_obs[-1], episode_raw_obs[-2]))
+            r = np.sign(r)
+
             t += 1
             episode_r += r
             episode_len += 1
 
-            for hook in step_hooks:
-                hook(env, agent, t)
-
             if done or episode_len == max_episode_len or t == steps:
-                agent.stop_episode_and_train(obs, r, done=done)
+                # get current state
+                state = episode_obs[-4:]
+                while len(state) < 4:
+                    state = [state[0].copy()] + state
+                state = np.transpose(np.concatenate(state, axis=-1), (2, 0, 1))
+
+                agent.stop_episode_and_train(state, r, done=done)
                 epsilon = agent.explorer.compute_epsilon(agent.t)
                 logger.info('outdir:{} step:{:,} episode:{} R:{} episode_step:{} epsilon:{}'.format(outdir, t, episode_idx, episode_r, episode_len, epsilon))
                 logger.info('statistics:%s', agent.get_statistics())
-                if evaluator is not None:
-                    evaluator.evaluate_if_necessary(t=t, episodes=episode_idx + 1)
+
+                if t % eval_interval == 0:
+                    imageio.mimwrite(os.path.join(outdir, 'episode{}.mp4'.format(episode_idx)), episode_raw_obs, fps=60)
+
+                    # eval run
+                    for i in range(eval_n_runs):
+                        eval_episode_raw_obs, eval_episode_r, eval_episode_len = run_eval_episode(agent, eval_env, eval_epsilon)
+                        logger.info('(eval) R:{} episode_step:{}'.format(eval_episode_r, eval_episode_len))
+                        imageio.mimwrite(os.path.join(outdir, 'eval_episode{}_{}.mp4'.format(episode_idx, i)), eval_episode_raw_obs, fps=60)
+
                 if t == steps:
                     break
                 # Start a new episode
@@ -72,6 +122,18 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
                 episode_idx += 1
                 episode_len = 0
                 obs = env.reset()
+                done = False
+                episode_raw_obs = [obs]
+                n_random_actions = random.randint(0, 30)
+                for _ in range(n_random_actions):
+                    observation, reward, done, info = env.step(0)
+                    episode_raw_obs.append(observation)
+                assert not done
+                if len(episode_raw_obs) == 1:
+                    last_obs = None
+                else:
+                    last_obs = episode_raw_obs[-2]
+                episode_obs = [phi(episode_raw_obs[-1], last_obs)]
                 r = 0
 
     except (Exception, KeyboardInterrupt):
@@ -83,10 +145,55 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
     save_agent(agent, t, outdir, logger, suffix='_finish')
 
 
+def run_eval_episode(agent, eval_env, eval_epsilon):
+    eval_episode_r = 0
+    eval_episode_len = 0
+    obs = eval_env.reset()
+    done = False
+    eval_episode_raw_obs = [obs]
+    n_random_actions = random.randint(0, 30)
+    for _ in range(n_random_actions):
+        observation, reward, done, info = eval_env.step(0)
+        eval_episode_raw_obs.append(observation)
+        eval_episode_r += reward
+        eval_episode_len += 1
+    assert not done
+    if len(eval_episode_raw_obs) == 1:
+        last_obs = None
+    else:
+        last_obs = eval_episode_raw_obs[-2]
+    eval_episode_obs = [phi(eval_episode_raw_obs[-1], last_obs)]
+
+    while True:
+        if np.random.random() < eval_epsilon:
+            action = eval_env.action_space.sample()
+        else:
+            # get current state
+            state = eval_episode_obs[-4:]
+            while len(state) < 4:
+                state = [state[0].copy()] + state
+            state = np.transpose(np.concatenate(state, axis=-1), (2, 0, 1))
+
+            action = agent.act(state)
+
+        for _ in range(4):
+            obs, tmp_r, done, info = eval_env.step(action)
+            eval_episode_raw_obs.append(obs)
+            eval_episode_r += tmp_r
+            eval_episode_len += 1
+            if done:
+                break
+        eval_episode_obs.append(phi(eval_episode_raw_obs[-1], eval_episode_raw_obs[-2]))
+
+        if done:
+            break
+    return eval_episode_raw_obs, eval_episode_r, eval_episode_len
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default='PongNoFrameskip-v4')
-    parser.add_argument('--outdir', type=str, default='chainerrl-results-unrolled2',
+    parser.add_argument('--outdir', type=str, default='chainerrl-results-envfix',
                         help='Directory path to save output files.'
                              ' If it does not exist, it will be created.')
     parser.add_argument('--seed', type=int, default=0,
@@ -121,21 +228,11 @@ def main():
     # Set a random seed used in ChainerRL.
     misc.set_random_seed(args.seed, gpus=(args.gpu,))
 
-    # Set different random seeds for train and test envs.
-    train_seed = args.seed
-    test_seed = 2 ** 31 - 1 - args.seed
-
     args.outdir = experiments.prepare_output_dir(args, args.outdir)
     print('Output files are saved in {}'.format(args.outdir))
 
     def make_env(test):
-        # Use different random seeds for train and test envs
-        env_seed = test_seed if test else train_seed
-        atari_env = atari_wrappers.make_atari(args.env)
-        env = atari_wrappers.wrap_deepmind(atari_env, episode_life=not test, clip_rewards=not test)
-        env.seed(int(env_seed))
-        if not args.no_monitor:
-            env = gym.wrappers.Monitor(env, args.outdir, mode='evaluation' if test else 'training')
+        env = gym.make(args.env)
         return env
 
     env = make_env(test=False)
@@ -172,36 +269,17 @@ def main():
     if args.load:
         agent.load(args.load)
     else:
-        # In testing DQN, randomly select 5% of actions
-        eval_explorer = explorers.ConstantEpsilonGreedy(args.eval_epsilon, lambda: np.random.randint(n_actions))
-
         logger = logging.getLogger(__name__)
 
-        makedirs(args.outdir, exist_ok=True)
-
-        if eval_env is None:
-            eval_env = env
-
-        eval_max_episode_len = args.max_episode_len
-
-        evaluator = Evaluator(agent=agent,
-                              n_runs=args.eval_n_runs,
-                              eval_interval=args.eval_interval, outdir=args.outdir,
-                              max_episode_len=eval_max_episode_len,
-                              explorer=eval_explorer,
-                              env=eval_env,
-                              step_offset=0,
-                              save_best_so_far_agent=False,
-                              logger=logger,
-                              )
+        os.makedirs(args.outdir, exist_ok=True)
 
         train_agent(
             agent, env, args.steps, args.outdir,
             max_episode_len=args.max_episode_len,
             step_offset=0,
-            evaluator=evaluator,
-            step_hooks=[],
-            logger=logger)
+            eval_env=eval_env,
+            logger=logger,
+            eval_interval=args.eval_interval, eval_n_runs=args.eval_n_runs, eval_epsilon=args.eval_epsilon)
 
 
 if __name__ == '__main__':

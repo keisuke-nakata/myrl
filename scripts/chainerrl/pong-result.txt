@@ -221,3 +221,29 @@ INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.175347009417
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:608738 episode:600 R:-19.0
 INFO:chainerrl.experiments.train_agent:statistics:[('average_q', -0.19692074802203696), ('average_loss', 0.10087595038507037)]
 INFO:chainerrl.experiments.train_agent:outdir:results/20180822T230313.643967 step:610181 episode:601 R:-19.0
+
+...step 9,000,000 あたり
+
+INFO:__main__:outdir:chainerrl-results-unrolled2/20180824T021049.094119 step:9,494,561 episode:4608 R:17.0 episode_step:2141 epsilon:0.1
+INFO:__main__:statistics:[('average_q', 1.4907313781458813), ('average_loss', 0.038505522913125256)]
+INFO:__main__:outdir:chainerrl-results-unrolled2/20180824T021049.094119 step:9,496,828 episode:4609 R:13.0 episode_step:2267 epsilon:0.1
+INFO:__main__:statistics:[('average_q', 1.531887515932076), ('average_loss', 0.044219852657818644)]
+INFO:__main__:outdir:chainerrl-results-unrolled2/20180824T021049.094119 step:9,499,173 episode:4610 R:19.0 episode_step:2345 epsilon:0.1
+INFO:__main__:statistics:[('average_q', 1.2592294463852232), ('average_loss', 0.039036640876018214)]
+synced target model.
+INFO:__main__:outdir:chainerrl-results-unrolled2/20180824T021049.094119 step:9,501,171 episode:4611 R:15.0 episode_step:1998 epsilon:0.1
+INFO:__main__:statistics:[('average_q', 1.5864998906235595), ('average_loss', 0.046829731975967556)]
+INFO:__main__:test episode: 0 R: 20.0 episode_step 1706
+INFO:__main__:test episode: 1 R: 19.0 episode_step 1816
+INFO:__main__:test episode: 2 R: 20.0 episode_step 1841
+INFO:__main__:test episode: 3 R: 21.0 episode_step 1619
+INFO:__main__:test episode: 4 R: 18.0 episode_step 2120
+INFO:__main__:test episode: 5 R: 18.0 episode_step 2042
+INFO:__main__:test episode: 6 R: 21.0 episode_step 1910
+INFO:__main__:test episode: 7 R: 21.0 episode_step 1730
+INFO:__main__:test episode: 8 R: 19.0 episode_step 1784
+INFO:__main__:test episode: 9 R: 17.0 episode_step 2043
+INFO:__main__:outdir:chainerrl-results-unrolled2/20180824T021049.094119 step:9,503,906 episode:4612 R:10.0 episode_step:2735 epsilon:0.1
+INFO:__main__:statistics:[('average_q', 1.263652492583094), ('average_loss', 0.03976937081274794)]
+INFO:__main__:outdir:chainerrl-results-unrolled2/20180824T021049.094119 step:9,506,069 episode:4613 R:19.0 episode_step:2163 epsilon:0.1
+INFO:__main__:statistics:[('average_q', 1.5372120370137876), ('average_loss', 0.034598807509349225)]

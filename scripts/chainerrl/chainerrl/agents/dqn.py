@@ -19,7 +19,8 @@ from chainerrl import agent
 
 def phi(x):
     # Feature extractor
-    return np.asarray(x, dtype=np.float32) / 255
+    # return np.asarray(x, dtype=np.float32) / 255
+    return x
 
 
 class DQN(agent.AttributeSavingMixin):
