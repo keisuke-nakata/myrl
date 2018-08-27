@@ -21,6 +21,9 @@ class VanillaReplay:
         self.full = False
 
     def push(self, experience):
+        state_int = np.round(experience[0] * 255).astype(np.uint8)  # [0, 1] -> [0, 255]
+        # state_int = np.round((experience[0] + 1) * 127.5).astype(np.uint8)  # [-1, 1] -> [0, 255]
+        experience = (state_int, experience[1], experience[2], experience[3])
         self.replay[self.head] = experience
         self.head += 1
         if self.head >= self.limit:
@@ -40,34 +43,28 @@ class VanillaReplay:
             end = len(self) - 1
         idxs = np.random.randint(end, size=size)  # `np.random.randint` is 5x faster than `np.random.choice` or `random.choices`.
         taboo = self.limit - 1 if self.head == 0 else self.head - 1  # current head points to the *next* index
-        if taboo in idxs:
-            for i, idx in enumerate(idxs):
-                if idx != taboo:
-                    continue
-                while idx == taboo:
-                    idx = np.random.randint(end)
-                idxs[i] = idx
-
-        # NOTE: self.replay[idx + 1][0] may contain the next episode's state.
-        # However such situation is allowed since `done` is True in that case.
-        # If `next_state` has the special meaning when `done` is True, then fix this implementation.
-        return [tuple([*self.replay[idx]] + [self.replay[(idx + 1) % self.limit][0]]) for idx in idxs]
+        exps = []
+        for i in range(len(idxs)):
+            while idxs[i] == taboo:
+                idxs[i] = np.random.randint(end)
+            idx = idxs[i]
+            rep = self.replay[idx]
+            state = (rep[0] / 255).astype(np.float32)  # [0, 255] -> [0, 1]
+            next_state = ((self.replay[(idx + 1) % self.limit][0]) / 255).astype(np.float32)  # [0, 255] -> [0, 1]
+            # state = (rep[0] / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
+            # next_state = ((self.replay[(idx + 1) % self.limit][0]) / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
+            exps.append((state, rep[1], rep[2], rep[3], next_state))
+        return exps
 
     def batch_sample(self, size):
         experiences = self.sample(size)
         states, actions, rewards, dones, next_states = zip(*experiences)
 
-        # batch_state = to_device(self.device, np.array(states, dtype=np.float32) / 255)
-        # batch_action = to_device(self.device, np.array(actions, dtype=np.int8))
-        # batch_reward = to_device(self.device, np.array(rewards, dtype=np.float32))
-        # batch_done = to_device(self.device, np.array(dones, dtype=np.int8))
-        # batch_next_state = to_device(self.device, np.array(next_states, dtype=np.float32) / 255)
-
-        batch_state = np.array(states, dtype=np.float32) / 255
+        batch_state = np.array(states, dtype=np.float32)
         batch_action = np.array(actions, dtype=np.int8)
         batch_reward = np.array(rewards, dtype=np.float32)
         batch_done = np.array(dones, dtype=np.int8)
-        batch_next_state = np.array(next_states, dtype=np.float32) / 255
+        batch_next_state = np.array(next_states, dtype=np.float32)
 
         return batch_state, batch_action, batch_reward, batch_done, batch_next_state
 

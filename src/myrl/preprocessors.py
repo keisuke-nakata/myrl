@@ -39,6 +39,7 @@ class Rescale:
     """
     def __call__(self, observation):
         ret = resize(observation, output_shape=(84, 84, 1), mode='constant', anti_aliasing=True, order=1)  # 210x160 -> 84x84x1, scales [0, 1]. order=1 means "bilinear".
+        # ret = ret * 2 - 1.0  # scales [-1, 1]
         return ret
 
 
@@ -61,12 +62,12 @@ class AtariPreprocessor:
         self.grayscale = GrayScale()
         self.rescale = Rescale()
         # self.float32 = Float32()
-        self.uint8 = UInt8()
+        # self.uint8 = UInt8()
 
     def __call__(self, observation, last_observation):
         observation = self.max_with_previous(observation, last_observation)
         observation = self.grayscale(observation)
         observation = self.rescale(observation)
         # observation = self.float32(observation)
-        observation = self.uint8(observation)
+        # observation = self.uint8(observation)
         return observation

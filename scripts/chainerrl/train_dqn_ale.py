@@ -8,6 +8,7 @@ standard_library.install_aliases()  # NOQA
 import argparse
 import os
 import random
+import traceback
 
 import gym
 gym.undo_logger_setup()  # NOQA
@@ -39,6 +40,7 @@ def phi(obs, last_obs):
     ret = rgb2gray(ret)  # will be ((210, 160), dtype=np.float64), scales [0, 1]
     ret = resize(ret, output_shape=(84, 84, 1), mode='constant', anti_aliasing=True, order=1)  # 210x160 -> 84x84x1, scales [0, 1]. order=1 means "bilinear".
     ret = ret.astype(np.float32)
+    # ret = np.round(ret * 255).astype(np.uint8)
     return ret
 
 
@@ -46,6 +48,8 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
                 step_offset=0, eval_env=None, logger=None, eval_interval=None, eval_n_runs=None, eval_epsilon=None):
     episode_r = 0
     episode_idx = 0
+
+    logpath = os.path.join(outdir, 'log.txt')
 
     # o_0, r_0
     obs = env.reset()
@@ -105,18 +109,25 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
 
                 agent.stop_episode_and_train(state, r, done=done)
                 epsilon = agent.explorer.compute_epsilon(agent.t)
-                logger.info('outdir:{} step:{:,} episode:{} R:{} episode_step:{} epsilon:{}'.format(outdir, t, episode_idx, episode_r, episode_len, epsilon))
+                msg = 'step:{:,} episode:{} R:{} episode_step:{} epsilon:{} replay_len:{:,}'.format(
+                    t, episode_idx, episode_r, episode_len, epsilon, len(agent.replay_buffer))
+                logger.info(msg)
+                with open(logpath, 'a') as f:
+                    print(msg, file=f)
                 logger.info('statistics:%s', agent.get_statistics())
 
                 if t > next_eval_t:
                     next_eval_t += eval_interval
-                    imageio.mimwrite(os.path.join(outdir, 'episode{}.mp4'.format(episode_idx)), episode_raw_obs, fps=60)
+                    imageio.mimwrite(os.path.join(outdir, 'episode{}_reward{}.mp4'.format(episode_idx, episode_r)), episode_raw_obs, fps=60)
 
                     # eval run
                     for i in range(eval_n_runs):
                         eval_episode_raw_obs, eval_episode_r, eval_episode_len = run_eval_episode(agent, eval_env, eval_epsilon)
-                        logger.info('(eval) R:{} episode_step:{}'.format(eval_episode_r, eval_episode_len))
-                        imageio.mimwrite(os.path.join(outdir, 'eval_episode{}_{}.mp4'.format(episode_idx, i)), eval_episode_raw_obs, fps=60)
+                        msg = '(eval) R:{} episode_step:{}'.format(eval_episode_r, eval_episode_len)
+                        logger.info(msg)
+                        with open(logpath, 'a') as f:
+                            print(msg, file=f)
+                        imageio.mimwrite(os.path.join(outdir, 'eval_episode{}_{}_reward{}.mp4'.format(episode_idx, i, eval_episode_r)), eval_episode_raw_obs, fps=60)
 
                 if t == steps:
                     break
@@ -142,6 +153,8 @@ def train_agent(agent, env, steps, outdir, max_episode_len=None,
     except (Exception, KeyboardInterrupt):
         # Save the current model before being killed
         save_agent(agent, t, outdir, logger, suffix='_except')
+        with open(logpath, 'a') as f:
+            traceback.print_exc(file=f)
         raise
 
     # Save the final model
@@ -189,6 +202,7 @@ def run_eval_episode(agent, eval_env, eval_epsilon):
         eval_episode_obs.append(phi(eval_episode_raw_obs[-1], eval_episode_raw_obs[-2]))
 
         if done:
+            agent.stop_episode()
             break
     return eval_episode_raw_obs, eval_episode_r, eval_episode_len
 
@@ -201,8 +215,6 @@ def main():
                              ' If it does not exist, it will be created.')
     parser.add_argument('--seed', type=int, default=0, help='Random seed [0, 2 ** 31)')
     parser.add_argument('--gpu', type=int, default=0)
-    parser.add_argument('--load', type=str, default=None)
-    parser.add_argument('--use-sdl', action='store_true', default=False)
     parser.add_argument('--final-exploration-frames', type=int, default=10 ** 6)
     parser.add_argument('--final-epsilon', type=float, default=0.1)
     parser.add_argument('--eval-epsilon', type=float, default=0.05)
@@ -262,20 +274,17 @@ def main():
                        target_update_interval=args.target_update_interval,
                        update_interval=args.update_interval)
 
-    if args.load:
-        agent.load(args.load)
-    else:
-        logger = logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
 
-        os.makedirs(args.outdir, exist_ok=True)
+    os.makedirs(args.outdir, exist_ok=True)
 
-        train_agent(
-            agent, env, args.steps, args.outdir,
-            max_episode_len=args.max_episode_len,
-            step_offset=0,
-            eval_env=eval_env,
-            logger=logger,
-            eval_interval=args.eval_interval, eval_n_runs=args.eval_n_runs, eval_epsilon=args.eval_epsilon)
+    train_agent(
+        agent, env, args.steps, args.outdir,
+        max_episode_len=args.max_episode_len,
+        step_offset=0,
+        eval_env=eval_env,
+        logger=logger,
+        eval_interval=args.eval_interval, eval_n_runs=args.eval_n_runs, eval_epsilon=args.eval_epsilon)
 
 
 if __name__ == '__main__':

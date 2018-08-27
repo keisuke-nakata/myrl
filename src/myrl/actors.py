@@ -72,7 +72,7 @@ class Actor:
         is_random, epsilon = self.explorer(step)
         if is_random:
             action = self.env.action_space.sample()
-            q_values = None
+            q_values = [np.nan] * self.env.action_space.n
         else:
             action, q_values = self.policy(state)
         reward, done = self._repeat_action(action)
@@ -91,9 +91,9 @@ class Actor:
             state = np.concatenate(state, axis=-1)
         return np.transpose(state.copy(), (2, 0, 1))  # chainer is channel first
 
-    def dump_episode_gif(self, path):
+    def dump_episode_anim(self, path):
         imageio.mimwrite(path, self.episode_obses, fps=60)
-        logger.info(f'dump episode at {path}.')
+        logger.info(f'dump episode animation at {path}.')
 
     def load_parameters(self, path):
         self.policy.load_parameters(path)

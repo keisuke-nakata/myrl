@@ -81,10 +81,13 @@ class DQN(agent.AttributeSavingMixin):
         self.sync_target_network()
         # For backward compatibility
         self.target_q_function = self.target_model
-        self.average_q = 0
+        # self.average_q = 0
         self.average_q_decay = average_q_decay
-        self.average_loss = 0
+        # self.average_loss = 0
         self.average_loss_decay = average_loss_decay
+
+        self.episode_qs = []
+        self.episode_losses = []
 
     def sync_target_network(self):
         """Synchronize target network with current network."""
@@ -157,8 +160,9 @@ class DQN(agent.AttributeSavingMixin):
         loss = F.sum(F.huber_loss(batch_q, batch_q_target, delta=1.0))
 
         # Update stats
-        self.average_loss *= self.average_loss_decay
-        self.average_loss += (1 - self.average_loss_decay) * float(loss.data)
+        # self.average_loss *= self.average_loss_decay
+        # self.average_loss += (1 - self.average_loss_decay) * float(loss.data)
+        self.episode_losses.append(float(loss.data))
 
         self.model.cleargrads()
         loss.backward()
@@ -175,8 +179,9 @@ class DQN(agent.AttributeSavingMixin):
                 action = cuda.to_cpu(action_value.greedy_actions.data)[0]
 
         # Update stats
-        self.average_q *= self.average_q_decay
-        self.average_q += (1 - self.average_q_decay) * q
+        # self.average_q *= self.average_q_decay
+        # self.average_q += (1 - self.average_q_decay) * q
+        self.episode_qs.append(q)
 
         self.logger.debug('t:%s q:%s action_value:%s', self.t, q, action_value)
         return action
@@ -190,8 +195,9 @@ class DQN(agent.AttributeSavingMixin):
                 greedy_action = cuda.to_cpu(action_value.greedy_actions.data)[0]
 
         # Update stats
-        self.average_q *= self.average_q_decay
-        self.average_q += (1 - self.average_q_decay) * q
+        # self.average_q *= self.average_q_decay
+        # self.average_q += (1 - self.average_q_decay) * q
+        self.episode_qs.append(q)
 
         self.logger.debug('t:%s q:%s action_value:%s', self.t, q, action_value)
 
@@ -252,6 +258,11 @@ class DQN(agent.AttributeSavingMixin):
     def stop_episode(self):
         self.last_state = None
         self.last_action = None
+
+        self.average_q = np.mean(self.episode_qs)
+        self.average_loss = np.mean(self.episode_losses)
+        self.episode_qs = []
+        self.episode_losses = []
 
     def get_statistics(self):
         return [

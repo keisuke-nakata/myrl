@@ -7,7 +7,7 @@ from chainer import optimizers
 from ..networks import VanillaCNN
 from ..actors import Actor
 from ..learners import FittedQLearner
-from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, GreedyExplorer
+from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, EpsilonGreedyExplorer
 from ..replays import VanillaReplay
 from ..preprocessors import AtariPreprocessor
 from ..env_wrappers import setup_env
@@ -56,8 +56,9 @@ class VanillaDQNAgent:
         env = setup_env(env_id, clip=False, life_episode=not test)
         preprocessor = AtariPreprocessor()
         if test:
-            n_noop_at_reset = (0, 0)
-            explorer = GreedyExplorer()
+            n_noop_at_reset = self.config['actor']['n_noop_at_reset']
+            # explorer = GreedyExplorer()
+            explorer = EpsilonGreedyExplorer(**self.config['explorer']['test']['params'])
         else:
             n_noop_at_reset = self.config['actor']['n_noop_at_reset']
             explorer = LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params'])
@@ -113,22 +114,24 @@ class VanillaDQNAgent:
             self.recorder.record(
                 total_step=n_steps, episode=n_episodes, episode_step=n_episode_steps,
                 reward=reward, action=action, action_meaning=action_meaning, is_random=is_random, epsilon=epsilon,
-                loss=loss, td_error=td_error)
+                action_q=q_values[action], loss=loss, td_error=td_error)
 
             # if episode is done...
             if done:
                 self.recorder.end_episode()
                 self.recorder.dump_episodewise_csv()
-                logger.info(self.recorder.dump_episodewise_str())
+                msg = self.recorder.dump_episodewise_str()
+                if warming_up:
+                    msg = '(warmup) ' + msg
+                logger.info(msg)
 
                 # testing
-                # if not warming_up and n_episodes % self.config['test_freq_episode'] == 0:
                 if not warming_up and n_steps >= next_test_step:
                     next_test_step += self.config['test_freq_step']
                     # save actor's play.
                     result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:06}')
                     os.makedirs(result_episode_dir, exist_ok=True)
-                    self.actor.dump_episode_gif(os.path.join(result_episode_dir, 'play.gif'))
+                    self.actor.dump_episode_anim(os.path.join(result_episode_dir, 'play.mp4'))
                     self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'step_history.csv'))
                     with open(os.path.join(result_episode_dir, 'summary.txt'), 'w') as f:
                         print(self.recorder.dump_episodewise_str(), file=f)
@@ -144,7 +147,7 @@ class VanillaDQNAgent:
                         self.test_recorder.record(
                             total_step=n_test_steps, episode=n_episodes, episode_step=n_test_episode_steps,
                             reward=reward, action=action, action_meaning=action_meaning, is_random=is_random, epsilon=epsilon,
-                            loss=float('nan'), td_error=float('nan'))
+                            action_q=q_values[action], loss=float('nan'), td_error=float('nan'))
                         n_test_steps += 1
                         n_test_episode_steps += 1
                         if done:
@@ -152,7 +155,7 @@ class VanillaDQNAgent:
                     self.test_recorder.end_episode()
                     self.test_recorder.dump_episodewise_csv()
                     logger.info(self.test_recorder.dump_episodewise_str())
-                    self.test_actor.dump_episode_gif(os.path.join(result_episode_dir, 'test_play.gif'))
+                    self.test_actor.dump_episode_anim(os.path.join(result_episode_dir, 'test_play.mp4'))
                     self.test_recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'test_step_history.csv'))
                     with open(os.path.join(result_episode_dir, 'test_summary.txt'), 'w') as f:
                         print(self.test_recorder.dump_episodewise_str(), file=f)
@@ -163,7 +166,7 @@ class VanillaDQNAgent:
                 n_episode_steps = 1
 
                 # preemptive timer...
-                if self.recorder.timer.elapsed > 60 * 60 * 20:  # 20 hours
+                if self.recorder.timer.elapsed > self.config['total_seconds']:
                     logger.info('Timeup. Training end.')
                     break
             else:  # if episode continues
