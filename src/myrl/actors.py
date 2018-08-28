@@ -39,6 +39,10 @@ class Actor:
         for _ in range(n_random_actions):
             observation, reward, done, info = self.env.step(NOOP_ACTION)
             self.episode_obses.append(observation)
+            if done:
+                observation = self.env.reset()
+                self.episode_obses = [observation]
+                done = False
         assert not done
 
         n_obses = len(self.episode_obses)
