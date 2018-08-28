@@ -49,7 +49,9 @@ class FittedQLearner:
         td_error_cpu = to_device(CPU_ID, td_error.array)
         return loss_cpu, td_error_cpu
 
-    def update_target_network(self):
+    def update_target_network(self, soft=None):
+        if soft is not None:
+            raise NotImplementedError
         # if self.target_network_update_soft is not None:  # soft update
         #     raise NotImplementedError
         # else:  # hard update

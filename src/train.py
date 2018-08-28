@@ -40,8 +40,8 @@ def train(config_path, env_id, device):
 
     try:
         agent_name = config['agent_name']
-        if agent_name == 'VanillaDQNAgent':
-            agent = algorithms.vanilla_dqn.VanillaDQNAgent()
+        if agent_name == 'DQNAgent':
+            agent = algorithms.dqn.DQNAgent()
         elif agent_name == 'AsyncDQNAgent':
             agent = algorithms.async_dqn.AsyncDQNAgent()
         else:

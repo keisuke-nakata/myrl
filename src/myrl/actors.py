@@ -69,7 +69,7 @@ class Actor:
         if self.is_done:
             self._reset()
         state = self.state
-        is_random, epsilon = self.explorer(step)
+        is_random, epsilon, warming_up = self.explorer(step)
         if is_random:
             action = self.env.action_space.sample()
             q_values = [np.nan] * self.env.action_space.n
@@ -78,7 +78,7 @@ class Actor:
         reward, done = self._repeat_action(action)
         self.is_done = done
         action_meaning = self.action_meanings[action]
-        return state, action, reward, done, is_random, epsilon, q_values, action_meaning
+        return state, action, reward, done, is_random, epsilon, warming_up, q_values, action_meaning
 
     @property
     def state(self):

@@ -28,28 +28,43 @@ class QPolicy:
 
 
 class GreedyExplorer:
+    def __init__(self, n_warmup_steps=0):
+        self.n_warmup_steps = n_warmup_steps
+
     def __call__(self, step):
-        return False, 0.0
+        if step < self.n_warmup_steps:
+            is_random = True
+            epsilon = 1.0
+            warming_up = True
+        else:
+            is_random = False
+            epsilon = 0.0
+            warming_up = False
+        return is_random, epsilon, warming_up
 
 
-class EpsilonGreedyExplorer:
-    def __init__(self, epsilon):
+class EpsilonGreedyExplorer(GreedyExplorer):
+    def __init__(self, epsilon, *args, **kwargs):
         self.epsilon = epsilon
+        super().__init__(*args, **kwargs)
 
     def __call__(self, step):
-        epsilon = self.get_epsilon(step)
-        is_random = np.random.uniform() < epsilon
-        return is_random, epsilon
+        is_random, epsilon, warming_up = super().__call__(step)
+        if not warming_up:
+            epsilon = self.get_epsilon(step)
+            is_random = np.random.uniform() < epsilon
+        return is_random, epsilon, warming_up
 
     def get_epsilon(self, step):
         return self.epsilon
 
 
 class LinearAnnealEpsilonGreedyExplorer(EpsilonGreedyExplorer):
-    def __init__(self, initial_epsilon, final_epsilon, final_exploration_step):
+    def __init__(self, initial_epsilon, final_epsilon, final_exploration_step, *args, **kwargs):
         self.initial_epsilon = initial_epsilon
         self.final_epsilon = final_epsilon
         self.final_exploration_step = final_exploration_step
+        super().__init__(epsilon=None, *args, **kwargs)
 
     def get_epsilon(self, step):
         if step > self.final_exploration_step:
