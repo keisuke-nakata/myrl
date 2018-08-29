@@ -4,12 +4,15 @@ import logging
 import ctypes as C
 import base64
 import multiprocessing
+from collections import namedtuple
 
 import redis
 import numpy as np
-# from chainer.dataset.convert import to_device
 
 logger = logging.getLogger(__name__)
+
+Experience = namedtuple('Experience', ['state', 'action', 'reward', 'done'])
+ExperienceIntState = namedtuple('ExperienceIntState', ['state', 'action', 'reward', 'done'])
 
 
 class VanillaReplay:
@@ -21,10 +24,10 @@ class VanillaReplay:
         self.full = False
 
     def push(self, experience):
-        state_int = np.round(experience[0] * 255).astype(np.uint8)  # [0, 1] -> [0, 255]
-        # state_int = np.round((experience[0] + 1) * 127.5).astype(np.uint8)  # [-1, 1] -> [0, 255]
-        experience = (state_int, experience[1], experience[2], experience[3])
-        self.replay[self.head] = experience
+        state_int = np.round(experience.state * 255).astype(np.uint8)  # [0, 1] -> [0, 255]
+        # state_int = np.round((experience.state + 1) * 127.5).astype(np.uint8)  # [-1, 1] -> [0, 255]
+        experience_int_state = ExperienceIntState(state_int, experience.action, experience.reward, experience.done)
+        self.replay[self.head] = experience_int_state
         self.head += 1
         if self.head >= self.limit:
             self.head = 0
@@ -43,22 +46,23 @@ class VanillaReplay:
             end = len(self) - 1
         idxs = np.random.randint(end, size=size)  # `np.random.randint` is 5x faster than `np.random.choice` or `random.choices`.
         taboo = self.limit - 1 if self.head == 0 else self.head - 1  # current head points to the *next* index
-        exps = []
+        exps_with_next = []
         for i in range(len(idxs)):
             while idxs[i] == taboo:
                 idxs[i] = np.random.randint(end)
             idx = idxs[i]
-            rep = self.replay[idx]
-            state = (rep[0] / 255).astype(np.float32)  # [0, 255] -> [0, 1]
-            next_state = ((self.replay[(idx + 1) % self.limit][0]) / 255).astype(np.float32)  # [0, 255] -> [0, 1]
-            # state = (rep[0] / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
-            # next_state = ((self.replay[(idx + 1) % self.limit][0]) / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
-            exps.append((state, rep[1], rep[2], rep[3], next_state))
-        return exps
+            experience_int_state = self.replay[idx]
+            next_experience_int_state = self.replay[(idx + 1) % self.limit]
+            state = (experience_int_state.state / 255).astype(np.float32)  # [0, 255] -> [0, 1]
+            next_state = (next_experience_int_state.state / 255).astype(np.float32)  # [0, 255] -> [0, 1]
+            # state = (experience_int_state.state / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
+            # next_state = (next_experience_int_state.state / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
+            exps_with_next.append((state, experience_int_state.action, experience_int_state.reward, experience_int_state.done, next_state))
+        return exps_with_next
 
     def batch_sample(self, size):
-        experiences = self.sample(size)
-        states, actions, rewards, dones, next_states = zip(*experiences)
+        experiences_with_next = self.sample(size)
+        states, actions, rewards, dones, next_states = zip(*experiences_with_next)
 
         batch_state = np.array(states, dtype=np.float32)
         batch_action = np.array(actions, dtype=np.int8)

@@ -54,16 +54,20 @@ class DQNAgent:
 
     def _build_actor(self, env_id, policy, eval_=False):
         env = setup_env(env_id, clip=False, life_episode=not eval_)
-        preprocessor = AtariPreprocessor()
+        odb_preprocessor = AtariPreprocessor()
         if eval_:
+            reward_preprocessor = lambda r: r  # noqa
             n_noop_at_reset = self.config['actor']['n_noop_at_reset']
             # explorer = GreedyExplorer()
             explorer = EpsilonGreedyExplorer(**self.config['explorer']['eval']['params'])
         else:
+            reward_preprocessor = np.sign
             n_noop_at_reset = self.config['actor']['n_noop_at_reset']
             explorer = LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params'])
 
-        actor = Actor(env, policy, explorer, preprocessor, n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
+        actor = Actor(
+            env, policy, explorer, odb_preprocessor, reward_preprocessor,
+            n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
         logger.info(f'built {"eval" if eval_ else ""} actor.')
         return actor
 
@@ -94,15 +98,13 @@ class DQNAgent:
                 n_episode_steps += 1
 
                 # actor
-                state, action, reward, done, is_random, epsilon, warming_up, q_values, action_meaning = self.actor.act(n_steps)
-                reward = np.sign(reward)
-                experience = (state, action, reward, done)
+                experience, exploration_info, q_values, action_meaning = self.actor.act(n_steps)
                 self.replay.push(experience)
 
                 # learner
-                if not warming_up and n_steps % self.config['learner']['target_network_update_freq_step'] == 0:
+                if not exploration_info.warming_up and n_steps % self.config['learner']['target_network_update_freq_step'] == 0:
                     self.learner.update_target_network(soft=None)
-                if not warming_up and n_steps % self.config['learner']['learn_freq_step'] == 0:
+                if not exploration_info.warming_up and n_steps % self.config['learner']['learn_freq_step'] == 0:
                     batch_state, batch_action, batch_reward, batch_done, batch_next_state = self.replay.batch_sample(self.config['learner']['batch_size'])
                     loss, td_error = self.learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
                 else:
@@ -111,22 +113,23 @@ class DQNAgent:
                 # recorder
                 self.recorder.record(
                     total_step=n_steps, episode=n_episodes, episode_step=n_episode_steps,
-                    reward=reward, action=action, action_meaning=action_meaning, is_random=is_random, epsilon=epsilon,
-                    action_q=q_values[action], loss=loss, td_error=td_error)
+                    reward=experience.reward, action=experience.action, action_meaning=action_meaning,
+                    is_random=exploration_info.is_random, epsilon=exploration_info.epsilon,
+                    action_q=q_values[experience.action], loss=loss, td_error=td_error)
 
                 # if episode is done...
-                if done:
+                if experience.done:
                     step_loop = False
 
                     self.recorder.end_episode()
                     self.recorder.dump_episodewise_csv()
                     msg = self.recorder.dump_episodewise_str()
-                    if warming_up:
+                    if exploration_info.warming_up:
                         msg = '(warmup) ' + msg
                     logger.info(msg)
 
                     # evaluate performance
-                    if not warming_up and n_steps >= next_eval_step:
+                    if not exploration_info.warming_up and n_steps >= next_eval_step:
                         result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:06}')
 
                         # save actor's play.
@@ -142,15 +145,17 @@ class DQNAgent:
                         self.eval_recorder.begin_episode()
                         n_eval_steps = n_steps
                         n_eval_episode_steps = 0
-                        eval_done = False
-                        while not eval_done:
+                        while True:
                             n_eval_steps += 1
                             n_eval_episode_steps += 1
-                            state, action, reward, eval_done, is_random, epsilon, q_values, action_meaning = self.eval_actor.act(n_steps)
+                            eval_experience, eval_exploration_info, q_values, action_meaning = self.eval_actor.act(n_steps)
                             self.eval_recorder.record(
                                 total_step=n_eval_steps, episode=n_episodes, episode_step=n_eval_episode_steps,
-                                reward=reward, action=action, action_meaning=action_meaning, is_random=is_random, epsilon=epsilon,
-                                action_q=q_values[action], loss=float('nan'), td_error=float('nan'))
+                                reward=eval_experience.reward, action=eval_experience.action, action_meaning=action_meaning,
+                                is_random=eval_exploration_info.is_random, epsilon=eval_exploration_info.epsilon,
+                                action_q=q_values[eval_experience.action], loss=float('nan'), td_error=float('nan'))
+                            if eval_experience.done:
+                                break
                         self.eval_recorder.end_episode()
                         self.eval_recorder.dump_episodewise_csv()
                         logger.info(self.eval_recorder.dump_episodewise_str())

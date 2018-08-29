@@ -1,4 +1,5 @@
 import logging
+from collections import namedtuple
 
 import numpy as np
 import chainer
@@ -7,6 +8,8 @@ from chainer.serializers import load_hdf5
 
 CPU_ID = -1
 logger = logging.getLogger(__name__)
+
+ExplorationInfo = namedtuple('ExplorationInfo', ['is_random', 'epsilon', 'warming_up'])
 
 
 class QPolicy:
@@ -32,7 +35,7 @@ class GreedyExplorer:
         self.n_warmup_steps = n_warmup_steps
 
     def __call__(self, step):
-        if step < self.n_warmup_steps:
+        if step < self.n_warmup_steps:  # warming_up
             is_random = True
             epsilon = 1.0
             warming_up = True
@@ -40,7 +43,7 @@ class GreedyExplorer:
             is_random = False
             epsilon = 0.0
             warming_up = False
-        return is_random, epsilon, warming_up
+        return ExplorationInfo(is_random, epsilon, warming_up)
 
 
 class EpsilonGreedyExplorer(GreedyExplorer):
@@ -49,11 +52,13 @@ class EpsilonGreedyExplorer(GreedyExplorer):
         super().__init__(*args, **kwargs)
 
     def __call__(self, step):
-        is_random, epsilon, warming_up = super().__call__(step)
-        if not warming_up:
-            epsilon = self.get_epsilon(step)
-            is_random = np.random.uniform() < epsilon
-        return is_random, epsilon, warming_up
+        exploration_info = super().__call__(step)
+        if exploration_info.warming_up:
+            return exploration_info
+        is_random = np.random.uniform() < exploration_info.epsilon
+        epsilon = self.get_epsilon(step)
+        warming_up = False
+        return ExplorationInfo(is_random, epsilon, warming_up)
 
     def get_epsilon(self, step):
         return self.epsilon

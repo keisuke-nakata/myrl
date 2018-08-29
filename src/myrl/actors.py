@@ -4,17 +4,21 @@ import random
 import numpy as np
 import imageio
 
+from .replays import Experience
+
+
 logger = logging.getLogger(__name__)
 
 NOOP_ACTION = 0
 
 
 class Actor:
-    def __init__(self, env, policy, explorer, obs_preprocessor, n_noop_at_reset=(0, 30), n_stack_frames=4, n_action_repeat=4):
+    def __init__(self, env, policy, explorer, obs_preprocessor, reward_preprocessor=None, n_noop_at_reset=(0, 30), n_stack_frames=4, n_action_repeat=4):
         self.env = env
         self.policy = policy
         self.explorer = explorer
         self.obs_preprocessor = obs_preprocessor
+        self.reward_preprocessor = reward_preprocessor
         self.n_noop_at_reset = n_noop_at_reset  # both inclusive
         self.n_stack_frames = n_stack_frames
         self.n_action_repeat = n_action_repeat
@@ -33,7 +37,6 @@ class Actor:
         self.episode_obses.append(observation)
 
         # noop action at reset
-        # because states consist of 4 skipped raw frames, some initial frames may be ignored in order to construct valid states.
         done = False
         n_random_actions = random.randint(*self.n_noop_at_reset)
         for _ in range(n_random_actions):
@@ -46,15 +49,13 @@ class Actor:
         assert not done
 
         n_obses = len(self.episode_obses)
-        assert n_obses == n_random_actions + 1
-        if n_obses == 1:  # just reset, no noop were performed
-            self.episode_processed_obses.append(self.obs_preprocessor(self.episode_obses[0], None))
-        elif n_obses < self.n_action_repeat:  # some NOOP(s) were performed, but short to skip 4
-            self.episode_processed_obses.append(self.obs_preprocessor(self.episode_obses[-1], self.episode_obses[-2]))
-        else:  # some NOOPs were performed, sufficient to skip 4
-            offset = n_obses % self.n_action_repeat
-            for i in range(offset, n_obses, self.n_action_repeat):
-                self.episode_processed_obses.append(self.obs_preprocessor(self.episode_obses[offset + 3], self.episode_obses[offset + 2]))
+        assert n_obses > 0
+        for i in range((n_obses - 1) % self.n_action_repeat, n_obses, self.n_action_repeat):
+            if i == 0:
+                last_obs = None
+            else:
+                last_obs = self.episode_obses[i - 1]
+            self.episode_processed_obses.append(self.obs_preprocessor(self.episode_obses[i], last_obs))
 
     def _repeat_action(self, action):
         """This method is one of the two method which calls `env.step()` (the other is `self._reset()`)"""
@@ -73,16 +74,18 @@ class Actor:
         if self.is_done:
             self._reset()
         state = self.state
-        is_random, epsilon, warming_up = self.explorer(step)
-        if is_random:
+        exploration_info = self.explorer(step)
+        if exploration_info.is_random:
             action = self.env.action_space.sample()
             q_values = [np.nan] * self.env.action_space.n
         else:
             action, q_values = self.policy(state)
         reward, done = self._repeat_action(action)
+        reward = self.reward_preprocessor(reward)
         self.is_done = done
         action_meaning = self.action_meanings[action]
-        return state, action, reward, done, is_random, epsilon, warming_up, q_values, action_meaning
+        experience = Experience(state, action, reward, done)
+        return experience, exploration_info, q_values, action_meaning
 
     @property
     def state(self):
