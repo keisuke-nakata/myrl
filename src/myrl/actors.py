@@ -84,7 +84,8 @@ class Actor:
         reward = self.reward_preprocessor(reward)
         self.is_done = done
         action_meaning = self.action_meanings[action]
-        experience = Experience(state, action, reward, done)
+        state_int = np.round(state * 255).astype(np.uint8)  # [0.0, 1.0] -> [0, 255]
+        experience = Experience(state_int, action, reward, done)
         return experience, exploration_info, q_values, action_meaning
 
     @property

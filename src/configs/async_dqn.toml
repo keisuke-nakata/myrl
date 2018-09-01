@@ -1,42 +1,46 @@
 agent_name = "AsyncDQNAgent"
 result_dir = "results/async_dqn/{env_id}/{now}"
 
-# n_warmup_steps = 50_000
-n_warmup_steps = 500
 n_total_steps = 50_000_000
 n_total_episodes = 1_000_000_000  # infinite...
-n_stack_frames = 4
+total_seconds = 82800  # 60 * 60 * 23 seconds, that is, 23 hours.
 
-test_freq_episode = 100
-
-actor_leaner_network_sync_freq_step = 10_000
+# eval_freq_episode = 100
+eval_freq_step = 100_000
 
 
 [replay]
-limit = 1_000_000  # requires approximately ___ GB memory
+limit = 1_000_000  # requires approximately 33 GB memory
 
 
 [explorer]
 
 [explorer.params]
+# n_warmup_steps = 50_000
+n_warmup_steps = 5000
 initial_epsilon = 1.0
 final_epsilon = 0.1
 final_exploration_step = 1_000_000
+
+[explorer.eval.params]
+epsilon = 0.05
 
 
 [learner]
 gamma = 0.99
 batch_size = 32
-target_network_update_freq_step = 40_000  # original parameter: 10_000, but multiplied by 4 (=learn_freq_step), because this is measured in the number of parameter updates.
+target_network_update_freq_update = 10_000  # this is measured in the number of parameter updates.
 # target_network_update_soft = 0.01
 learn_freq_step = 4
+parameter_dump_freq_update = 2500  # = 10_000 / 4
 
 [learner.optimizer]
-class = "RMSprop"
+class = "RMSpropGraves"
 
 [learner.optimizer.params]
 lr = 0.00025
 alpha = 0.95
+momentum = 0.0
 eps = 0.01
 
 
@@ -44,3 +48,4 @@ eps = 0.01
 n_noop_at_reset = [0, 30]
 n_stack_frames = 4
 n_action_repeat = 4
+parameter_load_freq_step = 10_000

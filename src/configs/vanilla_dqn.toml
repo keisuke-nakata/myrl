@@ -29,7 +29,7 @@ epsilon = 0.05
 [learner]
 gamma = 0.99
 batch_size = 32
-target_network_update_freq_step = 40_000  # original parameter: 10_000, but multiplied by 4 (=learn_freq_step), because this is measured in the number of parameter updates.
+target_network_update_freq_update = 10_000  # this is measured in the number of parameter updates.
 # target_network_update_soft = 0.01
 learn_freq_step = 4
 

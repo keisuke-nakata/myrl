@@ -12,7 +12,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'done'])
-ExperienceIntState = namedtuple('ExperienceIntState', ['state', 'action', 'reward', 'done'])
+# ExperienceIntState = namedtuple('ExperienceIntState', ['state', 'action', 'reward', 'done'])
 
 
 class VanillaReplay:
@@ -24,10 +24,11 @@ class VanillaReplay:
         self.full = False
 
     def push(self, experience):
-        state_int = np.round(experience.state * 255).astype(np.uint8)  # [0, 1] -> [0, 255]
-        # state_int = np.round((experience.state + 1) * 127.5).astype(np.uint8)  # [-1, 1] -> [0, 255]
-        experience_int_state = ExperienceIntState(state_int, experience.action, experience.reward, experience.done)
-        self.replay[self.head] = experience_int_state
+        # state_int = np.round(experience.state * 255).astype(np.uint8)  # [0.0, 1.0] -> [0, 255]
+        # state_int = np.round((experience.state + 1) * 127.5).astype(np.uint8)  # [-1.0, 1.0] -> [0, 255]
+        # experience_int_state = ExperienceIntState(state_int, experience.action, experience.reward, experience.done)
+        # self.replay[self.head] = experience_int_state
+        self.replay[self.head] = experience
         self.head += 1
         if self.head >= self.limit:
             self.head = 0
@@ -53,22 +54,25 @@ class VanillaReplay:
             idx = idxs[i]
             experience_int_state = self.replay[idx]
             next_experience_int_state = self.replay[(idx + 1) % self.limit]
-            state = (experience_int_state.state / 255).astype(np.float32)  # [0, 255] -> [0, 1]
-            next_state = (next_experience_int_state.state / 255).astype(np.float32)  # [0, 255] -> [0, 1]
-            # state = (experience_int_state.state / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
-            # next_state = (next_experience_int_state.state / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1, 1]
-            exps_with_next.append((state, experience_int_state.action, experience_int_state.reward, experience_int_state.done, next_state))
+            # state = (experience_int_state.state / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
+            # next_state = (next_experience_int_state.state / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
+            # state = (experience_int_state.state / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1.0, 1.0]
+            # next_state = (next_experience_int_state.state / 127.5 - 1.0).astype(np.float32)  # [0, 255] -> [-1.0, 1.0]
+            # exps_with_next.append((state, experience_int_state.action, experience_int_state.reward, experience_int_state.done, next_state))
+            exps_with_next.append((experience_int_state.state, experience_int_state.action, experience_int_state.reward, experience_int_state.done, next_experience_int_state.state))
         return exps_with_next
 
     def batch_sample(self, size):
         experiences_with_next = self.sample(size)
         states, actions, rewards, dones, next_states = zip(*experiences_with_next)
 
-        batch_state = np.array(states, dtype=np.float32)
+        # batch_state = np.array(states, dtype=np.float32)
+        batch_state = np.array(states, dtype=np.uint8)
         batch_action = np.array(actions, dtype=np.int8)
         batch_reward = np.array(rewards, dtype=np.float32)
         batch_done = np.array(dones, dtype=np.int8)
-        batch_next_state = np.array(next_states, dtype=np.float32)
+        # batch_next_state = np.array(next_states, dtype=np.float32)
+        batch_next_state = np.array(next_states, dtype=np.uint8)
 
         return batch_state, batch_action, batch_reward, batch_done, batch_next_state
 

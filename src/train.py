@@ -41,12 +41,12 @@ def train(config_path, env_id, device):
     try:
         agent_name = config['agent_name']
         if agent_name == 'DQNAgent':
-            agent = algorithms.dqn.DQNAgent()
+            agent = algorithms.dqn.DQNAgent(config, env_id, device)
         elif agent_name == 'AsyncDQNAgent':
-            agent = algorithms.async_dqn.AsyncDQNAgent()
+            agent = algorithms.async_dqn.AsyncDQNAgent(config, env_id, device)
         else:
             raise ValueError(f'Unknown agent: {agent_name}')
-        agent.build(config, env_id, device)
+        agent.build()
         logger.info('training start')
         csv_path, test_csv_path = agent.train()
         logger.info('training end')

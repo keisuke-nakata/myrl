@@ -24,22 +24,21 @@ step: 何回行動を選択したか。つまり、step の回数は、frame の
 
 
 class DQNAgent:
-    def build(self, config, env_id, device=0):
-        """
-        device: -1 (CPU), 0 (GPU)
-        """
-        self.recorder = StandardRecorder(os.path.join(config['result_dir'], 'history.csv'))
-        self.recorder.start()
-
-        self.eval_recorder = StandardRecorder(os.path.join(config['result_dir'], 'eval_history.csv'))
-        self.eval_recorder.template = '(eval) ' + self.eval_recorder.template
-        self.eval_recorder.start()
-
+    def __init__(self, config, env_id, device=0):
+        """device: -1 (CPU), 0 (GPU)"""
         self.config = config
         self.env_id = env_id
         self.device = device
 
-        self.n_actions = setup_env(env_id).action_space.n
+    def build(self):
+        self.recorder = StandardRecorder(os.path.join(self.config['result_dir'], 'history.csv'))
+        self.recorder.start()
+
+        self.eval_recorder = StandardRecorder(os.path.join(self.config['result_dir'], 'eval_history.csv'))
+        self.eval_recorder.template = '(eval) ' + self.eval_recorder.template
+        self.eval_recorder.start()
+
+        self.n_actions = setup_env(self.env_id).action_space.n
 
         self.network = VanillaCNN(self.n_actions)
         if self.device >= 0:
@@ -47,8 +46,8 @@ class DQNAgent:
         logger.info(f'built a network with device {self.device}.')
 
         policy = QPolicy(self.network)
-        self.actor = self._build_actor(env_id, policy)
-        self.eval_actor = self._build_actor(env_id, policy, eval_=True)
+        self.actor = self._build_actor(self.env_id, policy)
+        self.eval_actor = self._build_actor(self.env_id, policy, eval_=True)
         self.learner = self._build_learner(self.network, self.config['learner'])
         self.replay = VanillaReplay(limit=self.config['replay']['limit'])
 
@@ -85,6 +84,7 @@ class DQNAgent:
         n_steps = 0
         n_episodes = 0
         next_eval_step = self.config['eval_freq_step']
+        target_network_update_freq_step = self.config['learner']['target_network_update_freq_update'] * self.config['learner']['learn_freq_step']
 
         episode_loop = True
         while episode_loop:
@@ -102,9 +102,9 @@ class DQNAgent:
                 self.replay.push(experience)
 
                 # learner
-                if not exploration_info.warming_up and n_steps % self.config['learner']['target_network_update_freq_step'] == 0:
-                    self.learner.update_target_network(soft=None)
                 if not exploration_info.warming_up and n_steps % self.config['learner']['learn_freq_step'] == 0:
+                    if n_steps % target_network_update_freq_step == 0:
+                        self.learner.update_target_network(soft=None)
                     batch_state, batch_action, batch_reward, batch_done, batch_next_state = self.replay.batch_sample(self.config['learner']['batch_size'])
                     loss, td_error = self.learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
                 else:
@@ -131,9 +131,9 @@ class DQNAgent:
                     # evaluate performance
                     if not exploration_info.warming_up and n_steps >= next_eval_step:
                         result_episode_dir = os.path.join(self.config['result_dir'], f'episode{n_episodes:06}')
+                        os.makedirs(result_episode_dir, exist_ok=True)
 
                         # save actor's play.
-                        os.makedirs(result_episode_dir, exist_ok=True)
                         self.actor.dump_episode_anim(os.path.join(result_episode_dir, 'play.mp4'))
                         self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'step_history.csv'))
                         with open(os.path.join(result_episode_dir, 'summary.txt'), 'w') as f:

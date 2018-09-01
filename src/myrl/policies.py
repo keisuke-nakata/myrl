@@ -55,8 +55,8 @@ class EpsilonGreedyExplorer(GreedyExplorer):
         exploration_info = super().__call__(step)
         if exploration_info.warming_up:
             return exploration_info
-        is_random = np.random.uniform() < exploration_info.epsilon
         epsilon = self.get_epsilon(step)
+        is_random = np.random.uniform() < epsilon
         warming_up = False
         return ExplorationInfo(is_random, epsilon, warming_up)
 
