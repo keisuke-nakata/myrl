@@ -7,7 +7,6 @@ from chainer.serializers import save_hdf5
 from chainer.dataset.convert import to_device
 from chainer import optimizers
 
-
 logger = logging.getLogger(__name__)
 
 CPU_ID = -1
@@ -16,11 +15,7 @@ CPU_ID = -1
 def build_learner(network, learner_config):
     Learner = getattr(sys.modules[__name__], learner_config['class'])
     optimizer = getattr(optimizers, learner_config['optimizer']['class'])(**learner_config['optimizer']['params'])
-    learner = Learner(
-        network=network,
-        optimizer=optimizer,
-        gamma=learner_config['gamma']
-    )
+    learner = Learner(network=network, optimizer=optimizer, gamma=learner_config['gamma'])
     logger.info(f'built learner {learner}.')
     return learner
 

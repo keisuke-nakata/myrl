@@ -22,7 +22,7 @@ limit = 1_000_000  # requires approximately 33 GB memory
 
 [explorer.params]
 n_warmup_steps = 50_000
-# n_warmup_steps = 5000
+# n_warmup_steps = 3000
 initial_epsilon = 1.0
 final_epsilon = 0.1
 final_exploration_step = 1_000_000
@@ -55,3 +55,7 @@ n_noop_at_reset = [0, 30]
 n_stack_frames = 4
 n_action_repeat = 4
 parameter_load_freq_step = 10_000
+
+
+[network]
+class = "VanillaCNN"

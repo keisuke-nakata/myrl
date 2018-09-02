@@ -5,7 +5,7 @@ import queue
 
 import numpy as np
 
-from ..networks import VanillaCNN
+from ..networks import build_network
 from ..actors import Actor
 from ..learners import build_learner
 from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, EpsilonGreedyExplorer
@@ -62,7 +62,7 @@ class AsyncDQNAgent:
         return actor
 
     def act(self, actor_record_queue, actor_replay_queue, parameter_lock):
-        network = VanillaCNN(self.n_actions)
+        network = build_network(self.n_actions, self.config['network'])
         if self.device >= 0:
             network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')
@@ -109,7 +109,7 @@ class AsyncDQNAgent:
                         next_eval_step += self.config['eval_freq_step']
 
     def learn(self, learner_record_queue, learner_replay_queue, parameter_lock, ready_to_learn_event):
-        network = VanillaCNN(self.n_actions)
+        network = build_network(self.n_actions, self.config['network'])
         if self.device >= 0:
             network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')
@@ -168,7 +168,7 @@ class AsyncDQNAgent:
         replay_process.start()
 
         # build eval_actor
-        network = VanillaCNN(self.n_actions)
+        network = build_network(self.n_actions, self.config['network'])
         if self.device >= 0:
             network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')

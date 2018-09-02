@@ -1,12 +1,17 @@
-agent_name = "DQNAgent"
-result_dir = "results/vanilla_dqn/{env_id}/{now}"
+agent_name = "AsyncDQNAgent"
+result_dir = "results/dueling_async_dqn/{env_id}/{now}"
 
 n_total_steps = 50_000_000
 n_total_episodes = 1_000_000_000  # infinite...
 total_seconds = 82800  # 60 * 60 * 23 seconds, that is, 23 hours.
 
-# eval_freq_episode = 100
 eval_freq_step = 100_000
+# eval_freq_episode = 100
+
+actor_record_queue_size = 1000
+actor_replay_queue_size = 1000
+learner_record_queue_size = 250
+learner_replay_queue_size = 250
 
 
 [replay]
@@ -33,6 +38,7 @@ batch_size = 32
 target_network_update_freq_update = 10_000  # this is measured in the number of parameter updates.
 # target_network_update_soft = 0.01
 learn_freq_step = 4
+parameter_dump_freq_update = 2500  # = 10_000 / 4
 
 [learner.optimizer]
 class = "RMSpropGraves"
@@ -48,7 +54,9 @@ eps = 0.01
 n_noop_at_reset = [0, 30]
 n_stack_frames = 4
 n_action_repeat = 4
+parameter_load_freq_step = 10_000
 
 
 [network]
-class = "VanillaCNN"
+class = "DuelingCNN"
+dueling_mode = "avg"
