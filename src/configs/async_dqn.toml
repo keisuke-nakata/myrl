@@ -16,8 +16,8 @@ limit = 1_000_000  # requires approximately 33 GB memory
 [explorer]
 
 [explorer.params]
-# n_warmup_steps = 50_000
-n_warmup_steps = 5000
+n_warmup_steps = 50_000
+# n_warmup_steps = 5000
 initial_epsilon = 1.0
 final_epsilon = 0.1
 final_exploration_step = 1_000_000

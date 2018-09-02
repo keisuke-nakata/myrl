@@ -91,7 +91,6 @@ class AsyncDQNAgent:
                 action_q = q_values[experience.action]
                 actor_record_queue.put((n_steps, n_episodes, n_episode_steps, experience, exploration_info, action_meaning, action_q))  # this blocks
                 actor_replay_queue.put(experience)
-                # logger.warn('put actor_record_queue, actor_replay_queue')
 
                 if not exploration_info.warming_up and n_steps % self.config['actor']['parameter_load_freq_step'] == 0:
                     with parameter_lock:
@@ -138,11 +137,11 @@ class AsyncDQNAgent:
             n_updates += 1
             if n_updates % self.config['learner']['target_network_update_freq_update'] == 0:
                 learner.update_target_network(soft=None)
-            batch_state, batch_action, batch_reward, batch_done, batch_next_state = learner_replay_queue.get()  # this blocks
-            # logger.warn('get learner_replay_queue')
+            batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = learner_replay_queue.get()  # this blocks
+            batch_state = (batch_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
+            batch_next_state = (batch_next_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
             loss, td_error = learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
             learner_record_queue.put((loss, td_error))  # this blocks
-            # logger.warn('put learner_record_queue')
             if n_updates % self.config['learner']['parameter_dump_freq_update'] == 0:
                 with parameter_lock:
                     learner.dump_parameters(self.parameter_path)
@@ -157,13 +156,11 @@ class AsyncDQNAgent:
                 except queue.Empty:
                     break
                 else:
-                    # logger.warn('get actor_replay_queue')
                     replay.push(experience)
 
             if ready_to_learn_event.is_set() and not learner_replay_queue.full():
                 batch_state, batch_action, batch_reward, batch_done, batch_next_state = replay.batch_sample(self.config['learner']['batch_size'])
                 learner_replay_queue.put((batch_state, batch_action, batch_reward, batch_done, batch_next_state))
-                # logger.warn('put learner_replay_queue')
 
     def train(self):
         # prepare for multiprocessing
@@ -187,7 +184,6 @@ class AsyncDQNAgent:
         if self.device >= 0:
             network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')
-        # logger.info(f'built a network with device -1.')
         policy = QPolicy(network)
         eval_actor = self._build_actor(self.env_id, policy, eval_=True)
 

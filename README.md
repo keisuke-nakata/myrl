@@ -1,12 +1,11 @@
 # myrl
-reinforcement learning altorithm implementations
+reinforcement learning algorithm implementations
 
-# installation
+# Installation
 - I tested this script on Ubuntu 16 (with NVIDIA Tesla K80) on the Google Cloud Platform.
 - `pyenv` ([pyenv/pyenv-installer: This tool is used to install `pyenv` and friends.](https://github.com/pyenv/pyenv-installer#github-way-recommended "pyenv/pyenv-installer: This tool is used to install `pyenv` and friends."))
   is strongly recommended for building a python environment.
 - atari-py requires `cmake`, `zlib`, etc. Install them first (`apt-get install make cmake zlib1g-dev g++`).
-- for async-dqns, install Redis (see https://redis.io/download#installation).
 
 ## GPU support
 see: [Installation Guide — CuPy 4.3.0 documentation](http://docs-cupy.chainer.org/en/stable/install.html "Installation Guide — CuPy 4.3.0 documentation")
@@ -17,6 +16,6 @@ see: [Installation Guide — CuPy 4.3.0 documentation](http://docs-cupy.chainer.
   cuDNN and NCCL libraries are included in `cupy` wheels.
   - `$ pip install cupy-cuda92`
 
-# Redis
-- Run your server with `redis-server --save "" --appendonly no`.
-  - see https://stackoverflow.com/a/41238678/2500650
+# Usage
+- `python train.py configs/vanilla_dqn.toml PongNoFrameskip-v4`
+  - for more detail see `python train.py --help`
