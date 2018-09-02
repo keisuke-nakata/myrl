@@ -138,8 +138,8 @@ class AsyncDQNAgent:
             if n_updates % self.config['learner']['target_network_update_freq_update'] == 0:
                 learner.update_target_network(soft=None)
             batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = learner_replay_queue.get()  # this blocks
-            batch_state = (batch_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
-            batch_next_state = (batch_next_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
+            batch_state = batch_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
+            batch_next_state = batch_next_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
             loss, td_error = learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
             learner_record_queue.put((loss, td_error))  # this blocks
             if n_updates % self.config['learner']['parameter_dump_freq_update'] == 0:
@@ -150,7 +150,7 @@ class AsyncDQNAgent:
         replay = VanillaReplay(limit=self.config['replay']['limit'])
 
         while True:
-            while True:
+            for _ in range(self.config['learner']['learn_freq_step']):
                 try:
                     experience = actor_replay_queue.get(block=False)  # this does not block
                 except queue.Empty:
@@ -164,10 +164,10 @@ class AsyncDQNAgent:
 
     def train(self):
         # prepare for multiprocessing
-        actor_record_queue = mp.Queue(maxsize=400)
-        actor_replay_queue = mp.Queue(maxsize=400)
-        learner_record_queue = mp.Queue(maxsize=100)
-        learner_replay_queue = mp.Queue(maxsize=100)
+        actor_record_queue = mp.Queue(self.config['actor_record_queue_size'])
+        actor_replay_queue = mp.Queue(self.config['actor_replay_queue_size'])
+        learner_record_queue = mp.Queue(self.config['learner_record_queue_size'])
+        learner_replay_queue = mp.Queue(self.config['learner_replay_queue_size'])
         parameter_lock = mp.Lock()
         ready_to_learn_event = mp.Event()
 
@@ -191,12 +191,6 @@ class AsyncDQNAgent:
         n_episodes = 0
         next_eval_step = self.config['eval_freq_step']
 
-        cum_i = 0
-        cum = 0
-
-        cum_l_i = 0
-        cum_l = 0
-
         episode_loop = True
         while episode_loop:
             self.recorder.begin_episode()
@@ -208,14 +202,7 @@ class AsyncDQNAgent:
                 n_steps += 1
                 n_episode_steps += 1
 
-                s = time.time()
                 actor_n_steps, actor_n_episodes, actor_n_episode_steps, experience, exploration_info, action_meaning, action_q = actor_record_queue.get()
-                cum_i += 1
-                cum += (time.time() - s)
-                if cum_i % 1000 == 0:
-                    print('actor block: {}'.format(cum / cum_i))
-                    cum_i = 0
-                    cum = 0
                 assert n_steps == actor_n_steps
                 assert n_episodes == actor_n_episodes
                 assert n_episode_steps == actor_n_episode_steps
@@ -224,14 +211,7 @@ class AsyncDQNAgent:
                 if not exploration_info.warming_up:
                     ready_to_learn_event.set()
                     if n_steps % self.config['learner']['learn_freq_step'] == 0:
-                        s = time.time()
                         loss, td_error = learner_record_queue.get()
-                        cum_l_i += 1
-                        cum_l += (time.time() - s)
-                        if cum_l_i % 1000 == 0:
-                            print('learner block: {}'.format(cum_l / cum_l_i))
-                            cum_l_i = 0
-                            cum_l = 0
 
                 # recorder
                 self.recorder.record(
