@@ -2,11 +2,10 @@ import logging
 import os
 
 import numpy as np
-from chainer import optimizers
 
 from ..networks import VanillaCNN
 from ..actors import Actor
-from ..learners import FittedQLearner
+from ..learners import build_learner
 from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, EpsilonGreedyExplorer
 from ..replays import VanillaReplay
 from ..preprocessors import AtariPreprocessor
@@ -48,7 +47,7 @@ class DQNAgent:
         policy = QPolicy(self.network)
         self.actor = self._build_actor(self.env_id, policy)
         self.eval_actor = self._build_actor(self.env_id, policy, eval_=True)
-        self.learner = self._build_learner(self.network, self.config['learner'])
+        self.learner = build_learner(self.network, self.config['learner'])
         self.replay = VanillaReplay(limit=self.config['replay']['limit'])
 
     def _build_actor(self, env_id, policy, eval_=False):
@@ -69,16 +68,6 @@ class DQNAgent:
             n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
         logger.info(f'built {"eval" if eval_ else ""} actor.')
         return actor
-
-    def _build_learner(self, network, learner_config):
-        optimizer = getattr(optimizers, learner_config['optimizer']['class'])(**learner_config['optimizer']['params'])
-        learner = FittedQLearner(
-            network=network,
-            optimizer=optimizer,
-            gamma=learner_config['gamma']
-        )
-        logger.info(f'built learner.')
-        return learner
 
     def train(self):
         n_steps = 0

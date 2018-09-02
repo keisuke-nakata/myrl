@@ -2,14 +2,12 @@ import logging
 import os
 import multiprocessing as mp
 import queue
-import time
 
 import numpy as np
-from chainer import optimizers
 
 from ..networks import VanillaCNN
 from ..actors import Actor
-from ..learners import FittedQLearner
+from ..learners import build_learner
 from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, EpsilonGreedyExplorer
 from ..replays import VanillaReplay
 from ..preprocessors import AtariPreprocessor
@@ -60,7 +58,7 @@ class AsyncDQNAgent:
         actor = Actor(
             env, policy, explorer, odb_preprocessor, reward_preprocessor,
             n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
-        logger.info(f'built {"eval" if eval_ else ""} actor.')
+        logger.info(f'built {"eval " if eval_ else ""}actor.')
         return actor
 
     def act(self, actor_record_queue, actor_replay_queue, parameter_lock):
@@ -110,23 +108,13 @@ class AsyncDQNAgent:
 
                         next_eval_step += self.config['eval_freq_step']
 
-    def _build_learner(self, network, learner_config):
-        optimizer = getattr(optimizers, learner_config['optimizer']['class'])(**learner_config['optimizer']['params'])
-        learner = FittedQLearner(
-            network=network,
-            optimizer=optimizer,
-            gamma=learner_config['gamma']
-        )
-        logger.info(f'built learner.')
-        return learner
-
     def learn(self, learner_record_queue, learner_replay_queue, parameter_lock, ready_to_learn_event):
         network = VanillaCNN(self.n_actions)
         if self.device >= 0:
             network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')
 
-        learner = self._build_learner(network, self.config['learner'])
+        learner = build_learner(network, self.config['learner'])
         learner.dump_parameters(self.parameter_path)  # to sync the first parameter of learener's network with actor's one
         parameter_lock.release()
 
