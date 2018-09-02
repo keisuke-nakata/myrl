@@ -63,7 +63,7 @@ class AsyncDQNAgent:
         logger.info(f'built {"eval" if eval_ else ""} actor.')
         return actor
 
-    def act(self, actor_record_queue, actor_replay_queue, parameter_lock):
+    def act(self, actor_queue, replay_queue, parameter_lock):
         network = VanillaCNN(self.n_actions)
         if self.device >= 0:
             network.to_gpu(self.device)
@@ -89,8 +89,8 @@ class AsyncDQNAgent:
                 experience, exploration_info, q_values, action_meaning = actor.act(n_steps)
 
                 action_q = q_values[experience.action]
-                actor_record_queue.put((n_steps, n_episodes, n_episode_steps, experience, exploration_info, action_meaning, action_q))  # this blocks
-                actor_replay_queue.put(experience)
+                actor_queue.put((n_steps, n_episodes, n_episode_steps, experience, exploration_info, action_meaning, action_q))  # this blocks
+                replay_queue.put(experience)
 
                 if not exploration_info.warming_up and n_steps % self.config['actor']['parameter_load_freq_step'] == 0:
                     with parameter_lock:
@@ -120,7 +120,7 @@ class AsyncDQNAgent:
         logger.info(f'built learner.')
         return learner
 
-    def learn(self, learner_record_queue, learner_replay_queue, parameter_lock, ready_to_learn_event):
+    def learn(self, learner_queue, replay_queue, parameter_lock, ready_to_learn_event):
         network = VanillaCNN(self.n_actions)
         if self.device >= 0:
             network.to_gpu(self.device)
@@ -130,54 +130,44 @@ class AsyncDQNAgent:
         learner.dump_parameters(self.parameter_path)  # to sync the first parameter of learener's network with actor's one
         parameter_lock.release()
 
+        replay = VanillaReplay(limit=self.config['replay']['limit'])
+
         ready_to_learn_event.wait()
 
         n_updates = 0
         while True:
-            n_updates += 1
-            if n_updates % self.config['learner']['target_network_update_freq_update'] == 0:
-                learner.update_target_network(soft=None)
-            batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = learner_replay_queue.get()  # this blocks
-            batch_state = (batch_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
-            batch_next_state = (batch_next_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
-            loss, td_error = learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
-            learner_record_queue.put((loss, td_error))  # this blocks
-            if n_updates % self.config['learner']['parameter_dump_freq_update'] == 0:
-                with parameter_lock:
-                    learner.dump_parameters(self.parameter_path)
-
-    def replay(self, actor_replay_queue, learner_replay_queue, ready_to_learn_event):
-        replay = VanillaReplay(limit=self.config['replay']['limit'])
-
-        while True:
             while True:
                 try:
-                    experience = actor_replay_queue.get(block=False)  # this does not block
+                    experience = replay_queue.get(block=False)  # this does not block
                 except queue.Empty:
                     break
                 else:
                     replay.push(experience)
 
-            if ready_to_learn_event.is_set() and not learner_replay_queue.full():
-                batch_state, batch_action, batch_reward, batch_done, batch_next_state = replay.batch_sample(self.config['learner']['batch_size'])
-                learner_replay_queue.put((batch_state, batch_action, batch_reward, batch_done, batch_next_state))
+            if ready_to_learn_event.is_set() and not learner_queue.full():
+                n_updates += 1
+                batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = replay.batch_sample(self.config['learner']['batch_size'])
+                batch_state = (batch_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
+                batch_next_state = (batch_next_state_int / 255).astype(np.float32)  # [0, 255] -> [0.0, 1.0]
+                loss, td_error = learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
+                learner_queue.put((loss, td_error))  # this blocks
+                if n_updates % self.config['learner']['parameter_dump_freq_update'] == 0:
+                    with parameter_lock:
+                        learner.dump_parameters(self.parameter_path)
 
     def train(self):
         # prepare for multiprocessing
-        actor_record_queue = mp.Queue(maxsize=400)
-        actor_replay_queue = mp.Queue(maxsize=400)
-        learner_record_queue = mp.Queue(maxsize=100)
-        learner_replay_queue = mp.Queue(maxsize=100)
+        actor_queue = mp.Queue(maxsize=400)
+        learner_queue = mp.Queue(maxsize=100)
+        replay_queue = mp.Queue(maxsize=100)
         parameter_lock = mp.Lock()
         ready_to_learn_event = mp.Event()
 
-        learn_process = mp.Process(target=self.learn, args=(learner_record_queue, learner_replay_queue, parameter_lock, ready_to_learn_event))
-        parameter_lock.acquire()  # this lock is released when learn_process' built
+        learn_process = mp.Process(target=self.learn, args=(learner_queue, replay_queue, parameter_lock, ready_to_learn_event))
+        parameter_lock.acquire()  # this acquired lock is released at learn_process' built
         learn_process.start()
-        act_process = mp.Process(target=self.act, args=(actor_record_queue, actor_replay_queue, parameter_lock))
+        act_process = mp.Process(target=self.act, args=(actor_queue, replay_queue, parameter_lock))
         act_process.start()
-        replay_process = mp.Process(target=self.replay, args=(actor_replay_queue, learner_replay_queue, ready_to_learn_event))
-        replay_process.start()
 
         # build eval_actor
         network = VanillaCNN(self.n_actions)
@@ -209,7 +199,7 @@ class AsyncDQNAgent:
                 n_episode_steps += 1
 
                 s = time.time()
-                actor_n_steps, actor_n_episodes, actor_n_episode_steps, experience, exploration_info, action_meaning, action_q = actor_record_queue.get()
+                actor_n_steps, actor_n_episodes, actor_n_episode_steps, experience, exploration_info, action_meaning, action_q = actor_queue.get()
                 cum_i += 1
                 cum += (time.time() - s)
                 if cum_i % 1000 == 0:
@@ -225,7 +215,7 @@ class AsyncDQNAgent:
                     ready_to_learn_event.set()
                     if n_steps % self.config['learner']['learn_freq_step'] == 0:
                         s = time.time()
-                        loss, td_error = learner_record_queue.get()
+                        loss, td_error = learner_queue.get()
                         cum_l_i += 1
                         cum_l += (time.time() - s)
                         if cum_l_i % 1000 == 0:
@@ -300,6 +290,5 @@ class AsyncDQNAgent:
 
         act_process.terminate()
         learn_process.terminate()
-        replay_process.terminate()
 
         return self.recorder.episodewise_csv_path, self.eval_recorder.episodewise_csv_path
