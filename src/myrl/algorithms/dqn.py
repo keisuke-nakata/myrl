@@ -95,9 +95,7 @@ class DQNAgent:
                     if n_steps % target_network_update_freq_step == 0:
                         self.learner.update_target_network(soft=None)
                     batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = self.replay.batch_sample(self.config['learner']['batch_size'])
-                    batch_state = batch_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
-                    batch_next_state = batch_next_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
-                    loss, td_error = self.learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
+                    loss, td_error = self.learner.learn(batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int)
                 else:
                     loss, td_error = float('nan'), float('nan')
 

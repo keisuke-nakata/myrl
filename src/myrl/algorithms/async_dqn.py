@@ -126,9 +126,7 @@ class AsyncDQNAgent:
             if n_updates % self.config['learner']['target_network_update_freq_update'] == 0:
                 learner.update_target_network(soft=None)
             batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = learner_replay_queue.get()  # this blocks
-            batch_state = batch_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
-            batch_next_state = batch_next_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
-            loss, td_error = learner.learn(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
+            loss, td_error = learner.learn(batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int)
             learner_record_queue.put((loss, td_error))  # this blocks
             if n_updates % self.config['learner']['parameter_dump_freq_update'] == 0:
                 with parameter_lock:

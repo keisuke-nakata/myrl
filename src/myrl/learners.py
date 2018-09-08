@@ -1,6 +1,7 @@
 import logging
 import sys
 
+import numpy as np
 import chainer
 import chainer.functions as F
 from chainer.serializers import save_hdf5
@@ -30,10 +31,13 @@ class FittedQLearner:
         self.optimizer.setup(self.network)
         self.target_network = self.network.copy(mode='copy')  # this copies `_device_id` as well
 
-    def learn(self, batch_state, batch_action, batch_reward, batch_done, batch_next_state):
-        batch_state, batch_action, batch_reward, batch_done, batch_next_state = to_device(
+    def learn(self, batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int):
+        batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = to_device(
             self.network._device_id,
-            (batch_state, batch_action, batch_reward, batch_done, batch_next_state))
+            (batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int))
+
+        batch_state = batch_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
+        batch_next_state = batch_next_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
 
         batch_y, batch_q = self._compute_q_y(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
         assert len(batch_q.shape) == 1
