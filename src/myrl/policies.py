@@ -29,6 +29,9 @@ class QPolicy:
         load_hdf5(path, self.network)
         logger.info(f'load parameters from {path}')
 
+    def __repr__(self):
+        return f'<{self.__class__.__name__}(network={repr(self.network)}'
+
 
 class GreedyExplorer:
     def __init__(self, n_warmup_steps=0):
@@ -44,6 +47,9 @@ class GreedyExplorer:
             epsilon = 0.0
             warming_up = False
         return ExplorationInfo(is_random, epsilon, warming_up)
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}(n_warmup_steps={self.n_warmup_steps}'
 
 
 class EpsilonGreedyExplorer(GreedyExplorer):
@@ -63,6 +69,9 @@ class EpsilonGreedyExplorer(GreedyExplorer):
     def get_epsilon(self, step):
         return self.epsilon
 
+    def __repr__(self):
+        return f'<{self.__class__.__name__}(epsilon={self.epsilon}, n_warmup_steps={self.n_warmup_steps})>'
+
 
 class LinearAnnealEpsilonGreedyExplorer(EpsilonGreedyExplorer):
     def __init__(self, initial_epsilon, final_epsilon, final_exploration_step, *args, **kwargs):
@@ -77,3 +86,10 @@ class LinearAnnealEpsilonGreedyExplorer(EpsilonGreedyExplorer):
         else:  # linear annealing
             epsilon = (self.final_epsilon - self.initial_epsilon) / self.final_exploration_step * step + self.initial_epsilon
         return epsilon
+
+    def __repr__(self):
+        return (
+            f'<{self.__class__.__name__}'
+            f'(initial_epsilon={self.initial_epsilon}, final_epsilon={self.final_epsilon}, final_exploration_step={self.final_exploration_step}, '
+            f'n_warmup_steps={self.n_warmup_steps})>'
+        )

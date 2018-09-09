@@ -71,3 +71,6 @@ class AtariPreprocessor:
         # observation = self.float32(observation)
         # observation = self.uint8(observation)
         return observation
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}>'

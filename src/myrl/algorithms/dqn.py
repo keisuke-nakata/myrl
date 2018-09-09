@@ -49,9 +49,10 @@ class DQNAgent:
         self.eval_actor = self._build_actor(self.env_id, policy, eval_=True)
         self.learner = build_learner(self.network, self.config['learner'])
         self.replay = VanillaReplay(limit=self.config['replay']['limit'])
+        logger.info(f'built replay {self.replay}.')
 
     def _build_actor(self, env_id, policy, eval_=False):
-        env = setup_env(env_id, clip=False, life_episode=not eval_)
+        env = setup_env(env_id, life_episode=not eval_)
         odb_preprocessor = AtariPreprocessor()
         if eval_:
             reward_preprocessor = lambda r: r  # noqa
@@ -66,7 +67,7 @@ class DQNAgent:
         actor = Actor(
             env, policy, explorer, odb_preprocessor, reward_preprocessor,
             n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
-        logger.info(f'built {"eval" if eval_ else ""} actor.')
+        logger.info(f'built {"eval" if eval_ else ""} actor {actor}.')
         return actor
 
     def train(self):

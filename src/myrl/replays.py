@@ -1,12 +1,7 @@
 # import random
-import pickle
 import logging
-import ctypes as C
-import base64
-import multiprocessing
 from collections import namedtuple
 
-import redis
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -66,3 +61,6 @@ class VanillaReplay:
 
     def __len__(self):
         return self.head if not self.full else self.limit
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}(limit={self.limit}, gamma={self.gamma}, multi_step_n={self.multi_step_n})>'

@@ -40,9 +40,9 @@ class FittedQLearner:
         batch_next_state = batch_next_state_int.astype(np.float32) / 255  # [0, 255] -> [0.0, 1.0]
 
         batch_y, batch_q = self._compute_q_y(batch_state, batch_action, batch_reward, batch_done, batch_next_state)
-        assert len(batch_q.shape) == 1
-        assert len(batch_y.shape) == 1
-        assert batch_q.shape[0] == batch_y.shape[0]
+        # assert len(batch_q.shape) == 1
+        # assert len(batch_y.shape) == 1
+        # assert batch_q.shape[0] == batch_y.shape[0]
 
         # loss = F.mean(F.huber_loss(batch_q, batch_y, delta=1.0, reduce='no'))
         loss = F.sum(F.huber_loss(batch_q, batch_y, delta=1.0, reduce='no'))
@@ -79,6 +79,9 @@ class FittedQLearner:
     def dump_parameters(self, path):
         save_hdf5(filename=path, obj=self.network)
         logger.info(f'dump parameters into {path}')
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}(network={self.network}, optimizer={self.optimizer.__class__.__name__}, gamma={self.gamma}, multi_step_n={self.multi_step_n})>'
 
 
 class DoubleQLearner(FittedQLearner):

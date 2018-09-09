@@ -43,7 +43,7 @@ class AsyncDQNAgent:
         self.parameter_path = os.path.join(self.config['result_dir'], 'weight.hdf5')
 
     def _build_actor(self, env_id, policy, eval_=False):
-        env = setup_env(env_id, clip=False, life_episode=not eval_)
+        env = setup_env(env_id, life_episode=not eval_)
         odb_preprocessor = AtariPreprocessor()
         if eval_:
             reward_preprocessor = lambda r: r  # noqa
@@ -58,7 +58,7 @@ class AsyncDQNAgent:
         actor = Actor(
             env, policy, explorer, odb_preprocessor, reward_preprocessor,
             n_noop_at_reset, self.config['actor']['n_stack_frames'], self.config['actor']['n_action_repeat'])
-        logger.info(f'built {"eval " if eval_ else ""}actor.')
+        logger.info(f'built {"eval " if eval_ else ""}actor {actor}.')
         return actor
 
     def act(self, actor_record_queue, actor_replay_queue, parameter_lock):
@@ -134,6 +134,7 @@ class AsyncDQNAgent:
 
     def replay(self, actor_replay_queue, learner_replay_queue, ready_to_learn_event):
         replay = VanillaReplay(limit=self.config['replay']['limit'])
+        logger.info(f'built replay {replay}.')
 
         while True:
             for _ in range(self.config['learner']['learn_freq_step']):
@@ -158,7 +159,7 @@ class AsyncDQNAgent:
         ready_to_learn_event = mp.Event()
 
         learn_process = mp.Process(target=self.learn, args=(learner_record_queue, learner_replay_queue, parameter_lock, ready_to_learn_event))
-        parameter_lock.acquire()  # this lock is released when learn_process' built
+        parameter_lock.acquire()  # this lock is released when learn_process is built
         learn_process.start()
         act_process = mp.Process(target=self.act, args=(actor_record_queue, actor_replay_queue, parameter_lock))
         act_process.start()

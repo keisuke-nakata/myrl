@@ -53,6 +53,8 @@ class CNNBase(chainer.Chain):
 
 class VanillaCNN(chainer.Chain):
     def __init__(self, n_actions, feature_size=512):
+        self.n_actions = n_actions
+        self.feature_size = feature_size
         super().__init__()
         with self.init_scope():
             self.cnn_base = CNNBase(feature_size=feature_size)
@@ -63,10 +65,15 @@ class VanillaCNN(chainer.Chain):
         x = self.q_linear(x)
         return x
 
+    def __repr__(self):
+        return f'<{self.__class__.__name__}(n_actions={self.n_actions}, feature_size={self.feature_size})>'
+
 
 class DuelingCNN(chainer.Chain):
     def __init__(self, n_actions, mode, feature_size=512):
+        self.n_actions = n_actions
         self.mode = mode
+        self.feature_size = feature_size
         super().__init__()
         with self.init_scope():
             self.cnn_base = CNNBase(feature_size=feature_size)
@@ -91,3 +98,6 @@ class DuelingCNN(chainer.Chain):
         else:
             raise ValueError(f'Unknown mode {self.mode}')
         return ret
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}(n_actions={self.n_actions}, mode={self.mode}, feature_size={self.feature_size})>'

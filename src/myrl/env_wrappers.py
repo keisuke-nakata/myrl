@@ -2,21 +2,14 @@ import numpy as np
 import gym
 
 
-def setup_env(env_id, clip=False, suddendeath=False, life_episode=False):
+def setup_env(env_id, suddendeath=False, life_episode=False):
     env = gym.make(env_id)
-    env._max_episode_steps = 30000
-    if clip:
-        env = RewardClippingWrapper(env)
+    env._max_episode_steps = 108_000
     if suddendeath:
         env = SuddenDeathWrapper(env)
     if life_episode:
         env = LifeEpisodeWrapper(env)
     return env
-
-
-class RewardClippingWrapper(gym.RewardWrapper):
-    def reward(self, reward):
-        return np.sign(reward)
 
 
 class SuddenDeathWrapper(gym.Wrapper):

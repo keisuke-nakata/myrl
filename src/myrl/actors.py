@@ -105,3 +105,11 @@ class Actor:
 
     def load_parameters(self, path):
         self.policy.load_parameters(path)
+
+    def __repr__(self):
+        return (
+            f'<{self.__class__.__name__}'
+            f'(env={repr(self.env)}, policy={repr(self.policy)}, explorer={repr(self.explorer)}, '
+            f'obs_preprocessor={repr(self.obs_preprocessor)}, reward_preprocessor={repr(self.reward_preprocessor)}, '
+            f'n_noop_at_reset={self.n_noop_at_reset}, n_stack_frames={self.n_stack_frames}, n_action_repeat={self.n_action_repeat})>'
+        )
