@@ -8,7 +8,7 @@ from myrl import utils
 @click.option(
     '-o', '--out_path', type=click.Path(exists=False), default=None, show_default=True,
     help='output figure path, e.g.: results/history.png (If skipped the figure will be saved at the same directory of `csv_path`.)')
-@click.option('--window', default=301, type=int, show_default=True, help='moving average window')
+@click.option('--window', default=None, type=int, show_default=True, help='moving average window')
 @click.option('--title', default=None, show_default=True, help='title of figure')
 def visualize(csv_path, out_path, window, title):
     """

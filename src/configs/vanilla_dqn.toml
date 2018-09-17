@@ -1,5 +1,5 @@
 agent_name = "DQNAgent"
-result_dir = "results/vanilla_dqn/{env_id}/{now}"
+result_dir = "results/{env_id}/vanilla_dqn/{now}"
 
 n_total_steps = 50_000_000
 n_total_episodes = 1_000_000_000  # infinite...

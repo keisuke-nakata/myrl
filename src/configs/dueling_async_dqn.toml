@@ -1,5 +1,5 @@
 agent_name = "AsyncDQNAgent"
-result_dir = "results/dueling_async_dqn/{env_id}/{now}"
+result_dir = "results/{env_id}/dueling_async_dqn/{now}"
 
 n_total_steps = 50_000_000
 n_total_episodes = 1_000_000_000  # infinite...

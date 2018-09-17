@@ -14,7 +14,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def visualize(csv_path, out_path=None, window=301, title=None):
+def visualize(csv_path, out_path=None, window=None, title=None):
     if out_path is None:
         out_path = os.path.splitext(csv_path)[0] + '.png'
     out_dir = os.path.dirname(out_path)
@@ -22,6 +22,8 @@ def visualize(csv_path, out_path=None, window=301, title=None):
 
     df = pd.read_csv(csv_path)
     df.set_index(df.columns[0], inplace=True)
+    if window is None:
+        window = ceil(len(df) / 150)
     rolled = df.rolling(window=window, center=True)
     median_df = rolled.median()
     quantile25_df = rolled.quantile(0.25)
@@ -47,7 +49,7 @@ def visualize(csv_path, out_path=None, window=301, title=None):
     fig = ax.figure
     if title is None:
         title = ''
-    fig.suptitle(title)
+    fig.suptitle(f'{title} (window: {window})')
     fig.tight_layout()
     fig.subplots_adjust(top=0.95)
     fig.savefig(out_path)
@@ -55,25 +57,32 @@ def visualize(csv_path, out_path=None, window=301, title=None):
     plt.close(fig)
 
 
-def visualize_multi(root_path, out_path=None, window=301, title=None):
-    """root_path: results/UpNDownNoFrameskip-v4  とか"""
+def visualize_multi(root_path, out_path=None, window=None, title=None, csvname='history.csv'):
+    """For detail see `visualize_multi.py`."""
+    def episodewise_mean(dfs):
+        """Take mean grouped by episode of given list of DataFrames"""
+        return pd.concat(dfs).reset_index().groupby('episode').mean().reset_index().set_index('total_step').sort_index()
+
     if out_path is None:
-        out_path = os.path.join(root_path, 'history.png')
+        out_path = os.path.join(root_path, os.path.splitext(csvname)[0] + '.png')
     out_dir = os.path.dirname(out_path)
     os.makedirs(out_dir, exist_ok=True)
 
     median_dfs = {}
     quantile25_dfs = {}
     quantile75_dfs = {}
-    agent_names = [d for d in os.listdir(root_path) if not d.startswith('.')]
+    agent_names = [d for d in os.listdir(root_path) if d.endswith('dqn')]
     for agent_name in agent_names:
         tmp_median_dfs = []
         tmp_quantile25_dfs = []
         tmp_quantile75_dfs = []
         attempts = [d for d in os.listdir(os.path.join(root_path, agent_name)) if not d.startswith('.')]
         for attempt in attempts:
-            df = pd.read_csv(os.path.join(root_path, agent_name, attempt, 'history.csv'))
+            df = pd.read_csv(os.path.join(root_path, agent_name, attempt, csvname))
             df.set_index(df.columns[0], inplace=True)
+
+            if window is None:
+                window = ceil(len(df) / 150)
 
             rolled = df.rolling(window=window, center=True)
             median_df = rolled.median()
@@ -82,12 +91,15 @@ def visualize_multi(root_path, out_path=None, window=301, title=None):
             tmp_median_dfs.append(median_df)
             tmp_quantile25_dfs.append(quantile25_df)
             tmp_quantile75_dfs.append(quantile75_df)
-        median_concat_df = pd.concat(tmp_median_dfs)
-        quantile25_concat_df = pd.concat(tmp_quantile25_dfs)
-        quantile75_concat_df = pd.concat(tmp_quantile75_dfs)
-        median_dfs[agent_name] = median_concat_df.groupby(median_concat_df.index).mean()
-        quantile25_dfs[agent_name] = quantile25_concat_df.groupby(quantile25_concat_df.index).mean()
-        quantile75_dfs[agent_name] = quantile75_concat_df.groupby(quantile75_concat_df.index).mean()
+
+        if len(attempts) > 1:
+            median_dfs[agent_name] = episodewise_mean(tmp_median_dfs)
+            quantile25_dfs[agent_name] = episodewise_mean(tmp_quantile25_dfs)
+            quantile75_dfs[agent_name] = episodewise_mean(tmp_quantile75_dfs)
+        else:
+            median_dfs[agent_name] = tmp_median_dfs[0]
+            quantile25_dfs[agent_name] = tmp_quantile25_dfs[0]
+            quantile75_dfs[agent_name] = tmp_quantile75_dfs[0]
 
     columns = median_dfs[agent_name].columns
     ncol = 2
@@ -113,8 +125,8 @@ def visualize_multi(root_path, out_path=None, window=301, title=None):
 
     fig = ax.figure
     if title is None:
-        title = ''
-    fig.suptitle(title)
+        title = os.path.split(root_path)[-1]
+    fig.suptitle(f'{title} (window: {window})')
     fig.tight_layout()
     fig.subplots_adjust(top=0.95)
     fig.savefig(out_path)
