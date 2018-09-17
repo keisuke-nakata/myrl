@@ -13,20 +13,34 @@ logger = logging.getLogger(__name__)
 CPU_ID = -1
 
 
-def build_learner(network, learner_config):
+def build_learner(network, learner_config, gamma=0.99, multi_step_n=None):
     Learner = getattr(sys.modules[__name__], learner_config['class'])
     optimizer = getattr(optimizers, learner_config['optimizer']['class'])(**learner_config['optimizer']['params'])
-    learner = Learner(network=network, optimizer=optimizer, gamma=learner_config['gamma'])
+    if multi_step_n is not None:
+        discount = gamma ** multi_step_n
+    else:
+        discount = gamma
+    learner = Learner(network=network, optimizer=optimizer, discount=discount)
     logger.info(f'built learner {learner}.')
     return learner
 
 
 class FittedQLearner:
-    """Fitted Q learning, a.k.a Q learning with target network."""
-    def __init__(self, network, optimizer, gamma=0.99):
+    """Fitted Q learning, a.k.a Q learning with target network.
+
+    Parameters
+    ----------
+    network : chainer.Chain
+        network to be trained.
+    optimizer : chainer.Optimizer
+        optimizer to train the network.
+    discount : float [0, 1]
+        discount factor. Typically `discount = gamma`. For n-step Q-learning, set `discount = gamma ** multi_step_n`.
+    """
+    def __init__(self, network, optimizer, discount):
         self.network = network
         self.optimizer = optimizer
-        self.gamma = gamma
+        self.discount = discount
 
         self.optimizer.setup(self.network)
         self.target_network = self.network.copy(mode='copy')  # this copies `_device_id` as well
@@ -61,7 +75,7 @@ class FittedQLearner:
     def _compute_q_y(self, batch_state, batch_action, batch_reward, batch_done, batch_next_state):
         with chainer.no_backprop_mode():
             batch_target_q = self.target_network(batch_next_state)
-            batch_y = batch_reward + self.gamma * (1 - batch_done) * F.max(batch_target_q, axis=1)
+            batch_y = batch_reward + self.discount * (1 - batch_done) * F.max(batch_target_q, axis=1)
         batch_q = F.select_item(self.network(batch_state), batch_action)
         return batch_y, batch_q
 
@@ -81,7 +95,9 @@ class FittedQLearner:
         logger.info(f'dump parameters into {path}')
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}(network={self.network}, optimizer={self.optimizer.__class__.__name__}, gamma={self.gamma}, multi_step_n={self.multi_step_n})>'
+        return (
+            f'<{self.__class__.__name__}'
+            f'(network={self.network}, optimizer={self.optimizer.__class__.__name__}, discount={self.discount})>')
 
 
 class DoubleQLearner(FittedQLearner):
@@ -89,6 +105,6 @@ class DoubleQLearner(FittedQLearner):
         with chainer.no_backprop_mode():
             batch_max = F.argmax(self.network(batch_next_state), axis=1)
             batch_target_q = self.target_network(batch_next_state)
-            batch_y = batch_reward + self.gamma * (1 - batch_done) * F.select_item(batch_target_q, batch_max)
+            batch_y = batch_reward + self.discount * (1 - batch_done) * F.select_item(batch_target_q, batch_max)
         batch_q = F.select_item(self.network(batch_state), batch_action)
         return batch_y, batch_q
