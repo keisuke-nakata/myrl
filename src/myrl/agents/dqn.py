@@ -7,9 +7,9 @@ from ..networks import VanillaCNN
 from ..actors import Actor
 from ..learners import build_learner
 from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, EpsilonGreedyExplorer
-from ..replays import VanillaReplay
+from ..replays import build_replay
 from ..preprocessors import AtariPreprocessor
-from ..env_wrappers import setup_env
+from ..env_wrappers import setup_env, identity
 from ..utils import StandardRecorder, visualize
 
 logger = logging.getLogger(__name__)
@@ -47,15 +47,16 @@ class DQNAgent:
         policy = QPolicy(self.network)
         self.actor = self._build_actor(self.env_id, policy)
         self.eval_actor = self._build_actor(self.env_id, policy, eval_=True)
-        self.learner = build_learner(self.network, self.config['learner'])
-        self.replay = VanillaReplay(limit=self.config['replay']['limit'])
-        logger.info(f'built replay {self.replay}.')
+        multi_step_n = self.config.get('multi_step_n', None)
+        self.learner = build_learner(
+            self.network, self.config['learner'], gamma=self.config['gamma'], multi_step_n=multi_step_n)
+        self.replay = build_replay(self.config['replay'], gamma=self.config['gamma'], multi_step_n=multi_step_n)
 
     def _build_actor(self, env_id, policy, eval_=False):
         env = setup_env(env_id, life_episode=not eval_)
         odb_preprocessor = AtariPreprocessor()
         if eval_:
-            reward_preprocessor = lambda r: r  # noqa
+            reward_preprocessor = identity
             n_noop_at_reset = self.config['actor']['n_noop_at_reset']
             # explorer = GreedyExplorer()
             explorer = EpsilonGreedyExplorer(**self.config['explorer']['eval']['params'])
@@ -96,7 +97,8 @@ class DQNAgent:
                     if n_steps % target_network_update_freq_step == 0:
                         self.learner.update_target_network(soft=None)
                     batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = self.replay.batch_sample(self.config['learner']['batch_size'])
-                    loss, td_error = self.learner.learn(batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int)
+                    loss, td_error = self.learner.learn(
+                        batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int)
                 else:
                     loss, td_error = float('nan'), float('nan')
 

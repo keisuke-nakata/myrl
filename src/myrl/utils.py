@@ -83,8 +83,12 @@ class Recorder:
 
 
 class StandardRecorder(Recorder):
-    stepwise_header = ['total_step', 'episode', 'episode_step', 'reward', 'action', 'action_meaning', 'is_random', 'epsilon', 'action_q', 'loss', 'td_error']
-    episodewise_header = ['total_step', 'episode', 'episode_step', 'reward', 'epsilon', 'action_q', 'loss', 'td_error', 'duration', 'sps', 'total_duration']
+    stepwise_header = [
+        'total_step', 'episode', 'episode_step', 'reward', 'action', 'action_meaning', 'is_random', 'epsilon',
+        'action_q', 'loss', 'td_error']
+    episodewise_header = [
+        'total_step', 'episode', 'episode_step', 'reward', 'epsilon', 'action_q', 'loss', 'td_error',
+        'duration', 'sps', 'total_duration']
     template = (
         'total step:{total_step:,} episode:{episode:,} epi.step:{episode_step} reward:{reward:.0f} epsilon:{epsilon:.3f} '
         'action_q:{action_q:.3f} loss:{loss:.3f} td error:{td_error:.3f} '

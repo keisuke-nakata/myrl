@@ -38,7 +38,8 @@ class Rescale:
     https://github.com/deepmind/dqn/blob/master/dqn/Scale.lua#L25
     """
     def __call__(self, observation):
-        ret = resize(observation, output_shape=(84, 84, 1), mode='constant', anti_aliasing=True, order=1)  # 210x160 -> 84x84x1, scales [0, 1]. order=1 means "bilinear".
+        # 210x160 -> 84x84x1, scales [0, 1]. order=1 means "bilinear".
+        ret = resize(observation, output_shape=(84, 84, 1), mode='constant', anti_aliasing=True, order=1)
         # ret = ret * 2 - 1.0  # scales [-1, 1]
         return ret
 

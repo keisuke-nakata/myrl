@@ -7,7 +7,7 @@ import traceback
 import click
 import toml
 
-from myrl import algorithms
+from myrl.agents import build_agent
 from myrl.utils import visualize
 
 
@@ -39,14 +39,7 @@ def train(config_path, env_id, device):
     logging.config.dictConfig(logging_config)
 
     try:
-        agent_name = config['agent_name']
-        if agent_name == 'DQNAgent':
-            agent = algorithms.dqn.DQNAgent(config, env_id, device)
-        elif agent_name == 'AsyncDQNAgent':
-            agent = algorithms.async_dqn.AsyncDQNAgent(config, env_id, device)
-        else:
-            raise ValueError(f'Unknown agent: {agent_name}')
-        agent.build()
+        agent = build_agent(config, env_id, device)
         logger.info('training start')
         csv_path, test_csv_path = agent.train()
         logger.info('training end')

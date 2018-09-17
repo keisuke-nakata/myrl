@@ -9,9 +9,9 @@ from ..networks import build_network
 from ..actors import Actor
 from ..learners import build_learner
 from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, EpsilonGreedyExplorer
-from ..replays import VanillaReplay
+from ..replays import build_replay
 from ..preprocessors import AtariPreprocessor
-from ..env_wrappers import setup_env
+from ..env_wrappers import setup_env, identity
 from ..utils import StandardRecorder, visualize
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class AsyncDQNAgent:
         env = setup_env(env_id, life_episode=not eval_)
         odb_preprocessor = AtariPreprocessor()
         if eval_:
-            reward_preprocessor = lambda r: r  # noqa
+            reward_preprocessor = identity
             n_noop_at_reset = self.config['actor']['n_noop_at_reset']
             # explorer = GreedyExplorer()
             explorer = EpsilonGreedyExplorer(**self.config['explorer']['eval']['params'])
@@ -87,7 +87,8 @@ class AsyncDQNAgent:
                 experience, exploration_info, q_values, action_meaning = actor.act(n_steps)
 
                 action_q = q_values[experience.action]
-                actor_record_queue.put((n_steps, n_episodes, n_episode_steps, experience, exploration_info, action_meaning, action_q))  # this blocks
+                actor_record_queue.put(  # this blocks
+                    (n_steps, n_episodes, n_episode_steps, experience, exploration_info, action_meaning, action_q))
                 actor_replay_queue.put(experience)
 
                 if not exploration_info.warming_up and n_steps % self.config['actor']['parameter_load_freq_step'] == 0:
@@ -114,7 +115,8 @@ class AsyncDQNAgent:
             network.to_gpu(self.device)
         logger.info(f'built a network with device {self.device}.')
 
-        learner = build_learner(network, self.config['learner'])
+        multi_step_n = self.config.get('multi_step_n', None)
+        learner = build_learner(network, self.config['learner'], gamma=self.config['gamma'], multi_step_n=multi_step_n)
         learner.dump_parameters(self.parameter_path)  # to sync the first parameter of learener's network with actor's one
         parameter_lock.release()
 
@@ -133,8 +135,8 @@ class AsyncDQNAgent:
                     learner.dump_parameters(self.parameter_path)
 
     def replay(self, actor_replay_queue, learner_replay_queue, ready_to_learn_event):
-        replay = VanillaReplay(limit=self.config['replay']['limit'])
-        logger.info(f'built replay {replay}.')
+        multi_step_n = self.config.get('multi_step_n', None)
+        replay = build_replay(self.config['replay'], gamma=self.config['gamma'], multi_step_n=multi_step_n)
 
         while True:
             for _ in range(self.config['learner']['learn_freq_step']):
@@ -146,7 +148,8 @@ class AsyncDQNAgent:
                     replay.push(experience)
 
             if ready_to_learn_event.is_set() and not learner_replay_queue.full():
-                batch_state, batch_action, batch_reward, batch_done, batch_next_state = replay.batch_sample(self.config['learner']['batch_size'])
+                batch_state, batch_action, batch_reward, batch_done, batch_next_state = replay.batch_sample(
+                    self.config['learner']['batch_size'])
                 learner_replay_queue.put((batch_state, batch_action, batch_reward, batch_done, batch_next_state))
 
     def train(self):
@@ -158,12 +161,15 @@ class AsyncDQNAgent:
         parameter_lock = mp.Lock()
         ready_to_learn_event = mp.Event()
 
-        learn_process = mp.Process(target=self.learn, args=(learner_record_queue, learner_replay_queue, parameter_lock, ready_to_learn_event))
+        learn_process = mp.Process(
+            target=self.learn, args=(learner_record_queue, learner_replay_queue, parameter_lock, ready_to_learn_event))
         parameter_lock.acquire()  # this lock is released when learn_process is built
         learn_process.start()
-        act_process = mp.Process(target=self.act, args=(actor_record_queue, actor_replay_queue, parameter_lock))
+        act_process = mp.Process(
+            target=self.act, args=(actor_record_queue, actor_replay_queue, parameter_lock))
         act_process.start()
-        replay_process = mp.Process(target=self.replay, args=(actor_replay_queue, learner_replay_queue, ready_to_learn_event))
+        replay_process = mp.Process(
+            target=self.replay, args=(actor_replay_queue, learner_replay_queue, ready_to_learn_event))
         replay_process.start()
 
         # build eval_actor
@@ -189,7 +195,8 @@ class AsyncDQNAgent:
                 n_steps += 1
                 n_episode_steps += 1
 
-                actor_n_steps, actor_n_episodes, actor_n_episode_steps, experience, exploration_info, action_meaning, action_q = actor_record_queue.get()
+                (actor_n_steps, actor_n_episodes, actor_n_episode_steps,
+                    experience, exploration_info, action_meaning, action_q) = actor_record_queue.get()
                 assert n_steps == actor_n_steps
                 assert n_episodes == actor_n_episodes
                 assert n_episode_steps == actor_n_episode_steps

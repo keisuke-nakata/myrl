@@ -1,5 +1,8 @@
-import numpy as np
 import gym
+
+
+def identity(reward):
+    return reward
 
 
 def setup_env(env_id, suddendeath=False, life_episode=False):

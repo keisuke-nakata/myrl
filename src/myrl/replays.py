@@ -1,12 +1,21 @@
 # import random
 import logging
 from collections import namedtuple
+import sys
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 Experience = namedtuple('Experience', ['state_int', 'action', 'reward', 'done'])  # always store states as dtype==uint8.
+
+
+def build_replay(replay_config, gamma=None, multi_step_n=None):
+    Replay = getattr(sys.modules[__name__], replay_config['class'])
+    kwargs = {'limit': replay_config['limit']}
+    replay = Replay(**kwargs)
+    logger.info(f'built replay {replay}.')
+    return replay
 
 
 class VanillaReplay:

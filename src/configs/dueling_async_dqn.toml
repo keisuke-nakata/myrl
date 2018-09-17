@@ -6,15 +6,17 @@ n_total_episodes = 1_000_000_000  # infinite...
 total_seconds = 82800  # 60 * 60 * 23 seconds, that is, 23 hours.
 
 eval_freq_step = 100_000
-# eval_freq_episode = 100
 
 actor_record_queue_size = 1000
 actor_replay_queue_size = 1000
 learner_record_queue_size = 250
 learner_replay_queue_size = 250
 
+gamma = 0.99
+
 
 [replay]
+class = "VanillaReplay"
 limit = 1_000_000  # requires approximately 33 GB memory
 
 
@@ -33,7 +35,6 @@ epsilon = 0.05
 
 [learner]
 class = "FittedQLearner"
-gamma = 0.99
 batch_size = 32
 target_network_update_freq_update = 10_000  # this is measured in the number of parameter updates.
 # target_network_update_soft = 0.01

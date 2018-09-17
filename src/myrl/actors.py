@@ -13,7 +13,10 @@ NOOP_ACTION = 0
 
 
 class Actor:
-    def __init__(self, env, policy, explorer, obs_preprocessor, reward_preprocessor=None, n_noop_at_reset=(0, 30), n_stack_frames=4, n_action_repeat=4):
+    def __init__(
+            self,
+            env, policy, explorer, obs_preprocessor, reward_preprocessor=None,
+            n_noop_at_reset=(0, 30), n_stack_frames=4, n_action_repeat=4):
         self.env = env
         self.policy = policy
         self.explorer = explorer
@@ -27,7 +30,10 @@ class Actor:
         self.action_meanings = self.env.unwrapped.get_action_meanings()
 
     def _reset(self):
-        """this method is the only one which calls `env.reset()`, and one of the two method which calls `env.step()` (the other is `self._repeat_action()`)"""
+        """
+        this method is the only one which calls `env.reset()`,
+        and one of the two method which calls `env.step()` (the other is `self._repeat_action()`)
+        """
         self.episode_obses = []
         self.episode_processed_obses = []
 
@@ -111,5 +117,5 @@ class Actor:
             f'<{self.__class__.__name__}'
             f'(env={repr(self.env)}, policy={repr(self.policy)}, explorer={repr(self.explorer)}, '
             f'obs_preprocessor={repr(self.obs_preprocessor)}, reward_preprocessor={repr(self.reward_preprocessor)}, '
-            f'n_noop_at_reset={self.n_noop_at_reset}, n_stack_frames={self.n_stack_frames}, n_action_repeat={self.n_action_repeat})>'
-        )
+            f'n_noop_at_reset={self.n_noop_at_reset}, n_stack_frames={self.n_stack_frames}, '
+            f'n_action_repeat={self.n_action_repeat})>')

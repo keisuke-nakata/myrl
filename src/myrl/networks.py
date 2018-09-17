@@ -100,4 +100,6 @@ class DuelingCNN(chainer.Chain):
         return ret
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}(n_actions={self.n_actions}, mode={self.mode}, feature_size={self.feature_size})>'
+        return (
+            f'<{self.__class__.__name__}'
+            f'(n_actions={self.n_actions}, mode={self.mode}, feature_size={self.feature_size})>')

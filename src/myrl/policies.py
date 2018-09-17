@@ -90,6 +90,5 @@ class LinearAnnealEpsilonGreedyExplorer(EpsilonGreedyExplorer):
     def __repr__(self):
         return (
             f'<{self.__class__.__name__}'
-            f'(initial_epsilon={self.initial_epsilon}, final_epsilon={self.final_epsilon}, final_exploration_step={self.final_exploration_step}, '
-            f'n_warmup_steps={self.n_warmup_steps})>'
-        )
+            f'(initial_epsilon={self.initial_epsilon}, final_epsilon={self.final_epsilon}, '
+            f'final_exploration_step={self.final_exploration_step}, n_warmup_steps={self.n_warmup_steps})>')

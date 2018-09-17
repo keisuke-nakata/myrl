@@ -1,1 +1,1 @@
-from . import actors, learners, networks, policies, preprocessors, replays, algorithms, utils  # noqa
+from . import actors, learners, networks, policies, preprocessors, replays, agents, utils  # noqa
