@@ -1,6 +1,15 @@
 # myrl
 reinforcement learning algorithm implementations
 
+![history.png](history.png)
+
+Currently impolemented:
+- Vanilla DQN
+- Async DQN (Not A3C. This is multi-processed DQN)
+- Double DQN
+- Dueling DQN
+- Multi-step Q-learning DQN
+
 # Installation
 - I tested this script on Ubuntu 16 (with NVIDIA Tesla K80) on the Google Cloud Platform.
 - `pyenv` ([pyenv/pyenv-installer: This tool is used to install `pyenv` and friends.](https://github.com/pyenv/pyenv-installer#github-way-recommended "pyenv/pyenv-installer: This tool is used to install `pyenv` and friends."))
