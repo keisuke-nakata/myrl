@@ -14,7 +14,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def visualize(csv_path, out_path=None, window=10):
+def visualize(csv_path, out_path=None, window=301, title=None):
     if out_path is None:
         out_path = os.path.splitext(csv_path)[0] + '.png'
     out_dir = os.path.dirname(out_path)
@@ -22,16 +22,101 @@ def visualize(csv_path, out_path=None, window=10):
 
     df = pd.read_csv(csv_path)
     df.set_index(df.columns[0], inplace=True)
-    smoothed_df = df.rolling(window=window, center=True).mean()
+    rolled = df.rolling(window=window, center=True)
+    median_df = rolled.median()
+    quantile25_df = rolled.quantile(0.25)
+    quantile75_df = rolled.quantile(0.75)
 
     ncol = 2
-    nrow = ceil(len(smoothed_df.columns) / ncol)
-    axes = smoothed_df.plot(subplots=True, sharex=True, grid=True, figsize=(8 * ncol, 3 * nrow), layout=(nrow, ncol))
+    nrow = ceil(len(median_df.columns) / ncol)
 
-    axes.item(0).xaxis.set_major_formatter(mpl.ticker.EngFormatter())
+    index = median_df.index
+    fig = plt.figure(figsize=(8 * ncol, 3 * nrow))
+    axes = fig.subplots(nrows=nrow, ncols=ncol, sharex=True)
+    for idx, col in enumerate(median_df.columns):
+        ax = axes[idx // ncol][idx % ncol]
+        ax.plot(index, median_df[col], alpha=0.8)
+        ax.fill_between(index, quantile25_df[col], quantile75_df[col], alpha=0.3)
+        ax.grid(True)
+        ax.set_title(col)
+        if (idx // ncol) == (nrow - 1):  # bottom ax
+            ax.set_xlabel(index.name)
 
-    fig = axes.item(0).figure
+    ax.xaxis.set_major_formatter(mpl.ticker.EngFormatter())
+
+    fig = ax.figure
+    if title is None:
+        title = ''
+    fig.suptitle(title)
     fig.tight_layout()
+    fig.subplots_adjust(top=0.95)
+    fig.savefig(out_path)
+    logger.info(f'create figure at {out_path}')
+    plt.close(fig)
+
+
+def visualize_multi(root_path, out_path=None, window=301, title=None):
+    """root_path: results/UpNDownNoFrameskip-v4  とか"""
+    if out_path is None:
+        out_path = os.path.join(root_path, 'history.png')
+    out_dir = os.path.dirname(out_path)
+    os.makedirs(out_dir, exist_ok=True)
+
+    median_dfs = {}
+    quantile25_dfs = {}
+    quantile75_dfs = {}
+    agent_names = [d for d in os.listdir(root_path) if not d.startswith('.')]
+    for agent_name in agent_names:
+        tmp_median_dfs = []
+        tmp_quantile25_dfs = []
+        tmp_quantile75_dfs = []
+        attempts = [d for d in os.listdir(os.path.join(root_path, agent_name)) if not d.startswith('.')]
+        for attempt in attempts:
+            df = pd.read_csv(os.path.join(root_path, agent_name, attempt, 'history.csv'))
+            df.set_index(df.columns[0], inplace=True)
+
+            rolled = df.rolling(window=window, center=True)
+            median_df = rolled.median()
+            quantile25_df = rolled.quantile(0.25)
+            quantile75_df = rolled.quantile(0.75)
+            tmp_median_dfs.append(median_df)
+            tmp_quantile25_dfs.append(quantile25_df)
+            tmp_quantile75_dfs.append(quantile75_df)
+        median_concat_df = pd.concat(tmp_median_dfs)
+        quantile25_concat_df = pd.concat(tmp_quantile25_dfs)
+        quantile75_concat_df = pd.concat(tmp_quantile75_dfs)
+        median_dfs[agent_name] = median_concat_df.groupby(median_concat_df.index).mean()
+        quantile25_dfs[agent_name] = quantile25_concat_df.groupby(quantile25_concat_df.index).mean()
+        quantile75_dfs[agent_name] = quantile75_concat_df.groupby(quantile75_concat_df.index).mean()
+
+    columns = median_dfs[agent_name].columns
+    ncol = 2
+    nrow = ceil(len(columns) / ncol)
+
+    fig = plt.figure(figsize=(8 * ncol, 3 * nrow))
+    axes = fig.subplots(nrows=nrow, ncols=ncol, sharex=True)
+    for idx, col in enumerate(columns):
+        ax = axes[idx // ncol][idx % ncol]
+        for agent_idx, agent_name in enumerate(agent_names):
+            index = median_dfs[agent_name].index
+            color = f'C{agent_idx}'
+            ax.plot(index, median_dfs[agent_name][col], alpha=0.8, color=color, label=agent_name)
+            ax.fill_between(index, quantile25_dfs[agent_name][col], quantile75_dfs[agent_name][col], alpha=0.3, color=color)
+            if idx == 0:
+                ax.legend()
+        ax.grid(True)
+        ax.set_title(col)
+        if (idx // ncol) == (nrow - 1):  # bottom ax
+            ax.set_xlabel(index.name)
+
+    ax.xaxis.set_major_formatter(mpl.ticker.EngFormatter())
+
+    fig = ax.figure
+    if title is None:
+        title = ''
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.subplots_adjust(top=0.95)
     fig.savefig(out_path)
     logger.info(f'create figure at {out_path}')
     plt.close(fig)

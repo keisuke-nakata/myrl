@@ -234,7 +234,7 @@ class AsyncDQNAgent:
                         self.recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'step_history.csv'))
                         with open(os.path.join(result_episode_dir, 'summary.txt'), 'w') as f:
                             print(self.recorder.dump_episodewise_str(), file=f)
-                        visualize(self.recorder.episodewise_csv_path)
+                        visualize(self.recorder.episodewise_csv_path, title=self.env_id)
 
                         # eval_actor's play and save it.
                         logger.info(f'(episode {n_episodes}) eval_actor is playing...')
@@ -261,7 +261,7 @@ class AsyncDQNAgent:
                         self.eval_recorder.dump_stepwise_csv(os.path.join(result_episode_dir, 'eval_step_history.csv'))
                         with open(os.path.join(result_episode_dir, 'eval_summary.txt'), 'w') as f:
                             print(self.eval_recorder.dump_episodewise_str(), file=f)
-                        visualize(self.eval_recorder.episodewise_csv_path)
+                        visualize(self.eval_recorder.episodewise_csv_path, title=self.env_id)
 
                         next_eval_step += self.config['eval_freq_step']
 
