@@ -3,7 +3,7 @@ reinforcement learning algorithm implementations
 
 ![history.png](history.png)
 
-Currently impolemented:
+Currently implemented:
 - Vanilla DQN
 - Async DQN (Not A3C. This is multi-processed DQN)
 - Double DQN
