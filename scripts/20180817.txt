@@ -1,4 +1,0 @@
-huber_loss の mean じゃなくて sum を取る謎
-RMSprop じゃなくて RMSpropGraves という optimizer
-
-rescale の方法が嘘？ (cropping は結局してない？)
