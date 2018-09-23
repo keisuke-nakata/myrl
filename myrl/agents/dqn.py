@@ -6,7 +6,8 @@ import numpy as np
 from ..networks import VanillaCNN
 from ..actors import Actor
 from ..learners import build_learner
-from ..policies import QPolicy, LinearAnnealEpsilonGreedyExplorer, EpsilonGreedyExplorer
+from ..policies import QPolicy
+from ..explorers import build_explorer
 from ..replays import build_replay
 from ..preprocessors import AtariPreprocessor
 from ..env_wrappers import setup_env, identity
@@ -60,12 +61,11 @@ class DQNAgent:
         if eval_:
             reward_preprocessor = identity
             n_noop_at_reset = self.config['actor']['n_noop_at_reset']
-            # explorer = GreedyExplorer()
-            explorer = EpsilonGreedyExplorer(**self.config['explorer']['eval']['params'])
+            explorer = build_explorer(self.config['eval_explorer'])
         else:
             reward_preprocessor = np.sign
             n_noop_at_reset = self.config['actor']['n_noop_at_reset']
-            explorer = LinearAnnealEpsilonGreedyExplorer(**self.config['explorer']['params'])
+            explorer = build_explorer(self.config['explorer'])
 
         actor = Actor(
             env, policy, explorer, odb_preprocessor, reward_preprocessor,
