@@ -4,6 +4,8 @@ import csv
 import logging
 import os
 from math import ceil
+import subprocess
+import tempfile
 
 import numpy as np
 import matplotlib as mpl
@@ -11,9 +13,34 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from chainer.computational_graph import build_computational_graph
 import pydot
+import imageio
 
 
 logger = logging.getLogger(__name__)
+
+MAX_EACH_VIDEO_FRAMES = 5000
+
+
+def mimwrite(path, imgs):
+    if len(imgs) < MAX_EACH_VIDEO_FRAMES:
+        imageio.mimwrite(path, imgs, fps=60)
+    else:
+        n = ceil(len(imgs) / MAX_EACH_VIDEO_FRAMES)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            paths = []
+            for i in range(n):
+                each_path = os.path.join(tmpdir, f'{i}.mp4')
+                imageio.mimwrite(each_path, imgs[i * MAX_EACH_VIDEO_FRAMES : (i + 1) * MAX_EACH_VIDEO_FRAMES], fps=60)
+                paths.append(each_path)
+            concat_list = os.path.join(tmpdir, 'concat_list.txt')
+            logger.info(
+                f'frame length exceeds {len(imgs)} MAX_EACH_VIDEO_FRAMES={MAX_EACH_VIDEO_FRAMES}. '
+                f'split them into {n} files {paths} and try to concatenate afterward.')
+            with open(concat_list, 'w') as f:
+                for p in paths:
+                    print(f"file '{p}'", file=f)
+            cmd = f'ffmpeg -f concat -safe 0 -i {concat_list} -c copy {path}'
+            subprocess.run(cmd, shell=True, check=True)
 
 
 def plot_graph(network, path):

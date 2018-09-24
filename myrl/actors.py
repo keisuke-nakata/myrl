@@ -2,9 +2,9 @@ import logging
 import random
 
 import numpy as np
-import imageio
 
 from .replays import Experience
+from .utils import mimwrite
 
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ class Actor:
         return np.transpose(state.copy(), (2, 0, 1))  # chainer is channel first
 
     def dump_episode_anim(self, path):
-        imageio.mimwrite(path, self.episode_obses, fps=60)
+        mimwrite(path, self.episode_obses)
         logger.info(f'dump episode animation at {path}.')
 
     def load_parameters(self, path):
