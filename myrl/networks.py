@@ -5,15 +5,18 @@ import chainer
 import chainer.links as L
 import chainer.functions as F
 
+from .links import NoisyLinear
+
 logger = logging.getLogger(__name__)
 
 
 def build_network(n_actions, network_config):
     Network = getattr(sys.modules[__name__], network_config['class'])
+    noisy = network_config.get('noisy', False)
     if issubclass(Network, DuelingCNN):
-        network = Network(n_actions, mode=network_config['dueling_mode'])
+        network = Network(n_actions, mode=network_config['dueling_mode'], noisy=noisy)
     else:
-        network = Network(n_actions)
+        network = Network(n_actions, noisy=noisy)
     logger.info(f'built network {network}.')
     return network
 
@@ -26,7 +29,7 @@ class CNNBase(chainer.Chain):
 
     This follows the Nature version.
     """
-    def __init__(self, feature_size=512):
+    def __init__(self, feature_size=512, noisy=False):
         super().__init__()
         with self.init_scope():
             self.conv1 = L.Convolution2D(
@@ -41,7 +44,10 @@ class CNNBase(chainer.Chain):
                 in_channels=64, out_channels=64,
                 ksize=(3, 3), stride=1,
                 initial_bias=0.1)
-            self.f_linear = L.Linear(in_size=64 * 7 * 7, out_size=feature_size, initial_bias=0.1)
+            if noisy:
+                self.f_linear = NoisyLinear(in_size=64 * 7 * 7, out_size=feature_size, factorized=True)
+            else:
+                self.f_linear = L.Linear(in_size=64 * 7 * 7, out_size=feature_size, initial_bias=0.1)
 
     def __call__(self, x):
         x = F.relu(self.conv1(x))
@@ -52,13 +58,17 @@ class CNNBase(chainer.Chain):
 
 
 class VanillaCNN(chainer.Chain):
-    def __init__(self, n_actions, feature_size=512):
+    def __init__(self, n_actions, feature_size=512, noisy=False):
         self.n_actions = n_actions
         self.feature_size = feature_size
+        self.noisy = noisy
         super().__init__()
         with self.init_scope():
-            self.cnn_base = CNNBase(feature_size=feature_size)
-            self.q_linear = L.Linear(in_size=feature_size, out_size=n_actions)
+            self.cnn_base = CNNBase(feature_size=feature_size, noisy=noisy)
+            if self.noisy:
+                self.q_linear = NoisyLinear(in_size=feature_size, out_size=n_actions)
+            else:
+                self.q_linear = L.Linear(in_size=feature_size, out_size=n_actions)
 
     def __call__(self, x):
         x = self.cnn_base(x)
@@ -66,19 +76,27 @@ class VanillaCNN(chainer.Chain):
         return x
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}(n_actions={self.n_actions}, feature_size={self.feature_size})>'
+        return (
+            f'<{self.__class__.__name__}('
+            f'n_actions={self.n_actions}, feature_size={self.feature_size}, noisy={self.noisy}'
+            f')>')
 
 
 class DuelingCNN(chainer.Chain):
-    def __init__(self, n_actions, mode, feature_size=512):
+    def __init__(self, n_actions, mode, feature_size=512, noisy=False):
         self.n_actions = n_actions
         self.mode = mode
         self.feature_size = feature_size
+        self.noisy = noisy
         super().__init__()
         with self.init_scope():
-            self.cnn_base = CNNBase(feature_size=feature_size)
-            self.a_linear = L.Linear(in_size=feature_size, out_size=n_actions)
-            self.v_linear = L.Linear(in_size=feature_size, out_size=1)
+            self.cnn_base = CNNBase(feature_size=feature_size, noisy=noisy)
+            if noisy:
+                self.a_linear = NoisyLinear(in_size=feature_size, out_size=n_actions)
+                self.v_linear = NoisyLinear(in_size=feature_size, out_size=1)
+            else:
+                self.a_linear = L.Linear(in_size=feature_size, out_size=n_actions)
+                self.v_linear = L.Linear(in_size=feature_size, out_size=1)
 
     def __call__(self, x):
         x = self.cnn_base(x)
@@ -101,5 +119,6 @@ class DuelingCNN(chainer.Chain):
 
     def __repr__(self):
         return (
-            f'<{self.__class__.__name__}'
-            f'(n_actions={self.n_actions}, mode={self.mode}, feature_size={self.feature_size})>')
+            f'<{self.__class__.__name__}('
+            f'n_actions={self.n_actions}, mode={self.mode}, feature_size={self.feature_size}, noisy={self.noisy}'
+            f')>')

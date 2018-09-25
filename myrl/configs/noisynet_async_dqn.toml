@@ -1,0 +1,64 @@
+agent_name = "AsyncDQNAgent"
+result_dir = "results/{env_id}/noisynet_async_dqn/{now}"
+
+n_total_steps = 50_000_000
+n_total_episodes = 1_000_000_000  # infinite...
+total_seconds = 82800  # 60 * 60 * 23 seconds, that is, 23 hours.
+
+eval_freq_step = 100_000
+
+actor_record_queue_size = 1000
+actor_replay_queue_size = 1000
+learner_record_queue_size = 250
+learner_replay_queue_size = 250
+
+gamma = 0.99
+
+
+[replay]
+class = "VanillaReplay"
+limit = 1_000_000  # requires approximately 33 GB memory
+
+
+[explorer]
+class = "GreedyExplorer"
+
+[explorer.params]
+n_warmup_steps = 50_000
+# n_warmup_steps = 3000
+
+
+[eval_explorer]
+class = "GreedyExplorer"
+
+[eval_explorer.params]
+
+
+[learner]
+class = "FittedQLearner"
+batch_size = 32
+target_network_update_freq_update = 10_000  # this is measured in the number of parameter updates.
+# target_network_update_soft = 0.01
+learn_freq_step = 4
+parameter_dump_freq_update = 2500  # = 10_000 / 4
+
+[learner.optimizer]
+class = "RMSpropGraves"
+
+[learner.optimizer.params]
+lr = 0.00025
+alpha = 0.95
+momentum = 0.0
+eps = 0.01
+
+
+[actor]
+n_noop_at_reset = [0, 30]
+n_stack_frames = 4
+n_action_repeat = 4
+parameter_load_freq_step = 10_000
+
+
+[network]
+class = "VanillaCNN"
+noisy = true
