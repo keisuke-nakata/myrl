@@ -17,37 +17,41 @@ def visualize_multi(root_path, out_path, window, title, csvname):
 
     Assumed directory:
 
-    <ROOT_PATH>: UpNDownNoFrameskip-v4/\n
-    ├── some_dqn/\n
-    │   ├── 20180903_231555/\n
-    │   │   ├── eval_history.csv\n
-    │   │   └── history.csv\n
-    │   └── 20180909_015845/\n
-    │       ├── eval_history.csv\n
-    │       └── history.csv\n
-    ├── another_dqn/\n
-    │   └── 20180903_231708/\n
-    │       ├── eval_history.csv\n
-    │       └── history.csv\n
-    └── the_other_dqn/\n
-        ├── 20180909_193947/\n
-        │   ├── eval_history.csv\n
-        │   └── history.csv\n
-        ├── 20180910_002200/\n
-        │   ├── eval_history.csv\n
-        │   └── history.csv\n
-        ├── 20180916_013155/\n
-        │   ├── eval_history.csv\n
-        │   └── history.csv\n
-        └── 20180917_014429/\n
-            ├── eval_history.csv\n
-            └── history.csv\n
+    \b
+    <ROOT_PATH>: UpNDownNoFrameskip-v4/
+    ├── some_dqn/
+    │   ├── 20180903_231555/
+    │   │   ├── eval_history.csv
+    │   │   └── history.csv
+    │   └── 20180909_015845/
+    │       ├── eval_history.csv
+    │       └── history.csv
+    ├── another_dqn/
+    │   └── 20180903_231708/
+    │       ├── eval_history.csv
+    │       └── history.csv
+    └── the_other_dqn/
+        ├── 20180909_193947/
+        │   ├── eval_history.csv
+        │   └── history.csv
+        ├── 20180910_002200/
+        │   ├── eval_history.csv
+        │   └── history.csv
+        ├── 20180916_013155/
+        │   ├── eval_history.csv
+        │   └── history.csv
+        └── 20180917_014429/
+            ├── eval_history.csv
+            └── history.csv
 
     You can obtain above results csvs from GCS by:
 
-    for path in $(gsutil ls "gs://myrl/results/UpNDownNoFrameskip-v4/*dqn/*/eval_history.csv"); do\n
-      gsutil cp $path ${path#gs://myrl/results/};\n
-    done;\n
+    \b
+    for path in $(gsutil ls "gs://myrl/results/<env_id>/*dqn/*/*history.csv"); do
+      gsutil cp $path ${path#gs://myrl/results/};
+    done;
+    python visualize_multi.py ./<env_id> --csvname history.csv
+    python visualize_multi.py ./<env_id> --csvname eval_history.csv
     """
     utils.visualize_multi(root_path=root_path, out_path=out_path, window=window, title=title, csvname=csvname)
     return out_path
