@@ -6,7 +6,7 @@ reinforcement learning algorithm implementations
 
 Currently implemented:
 - Vanilla DQN [[1]](#References) [[2]](#References)
-- Async DQN (Not A3C. This is multi-processed DQN)
+- Async DQN (Multi-processed DQN, follows architecture described in [[7]](#References).)
 - Double DQN [[3]](#References)
 - Dueling DQN [[4]](#References)
 - Multi-step Q-learning DQN [[5]](#References)
@@ -38,3 +38,4 @@ see: [Installation Guide — CuPy 4.3.0 documentation](http://docs-cupy.chainer.
 - [4] [Wang, Z., T. Schaul, M. Hessel, H. van Hasselt, M. Lanctot, and N. de Freitas. 2016. Dueling Network Architectures for Deep Reinforcement Learning. ICML.](https://arxiv.org/abs/1511.06581)
 - [5] [Sutton, R. S. 1988. Learning to Predict by the Method of Temporal Differences. Machine Learning.](https://pdfs.semanticscholar.org/9c06/865e912788a6a51470724e087853d7269195.pdf)
 - [6] [Fortunato, M., M. G. Azar, B. Piot, J. Menick, I. Osband, A. Graves, V. Mnih, R. Munos, D. Hassabis, O. Pietquin, C. Blundell, and S. Legg. 2018. Noisy Networks for Exploration. ICLR.](http://arxiv.org/abs/1706.10295)
+- [7] [Horgan, D., J. Quan, D. Budden, G. Barth-Maron, M. Hessel, H. van Hasselt, and D. Silver. 2018. Distributed Prioritized Experience Replay. ICLR.](https://arxiv.org/abs/1803.00933)
