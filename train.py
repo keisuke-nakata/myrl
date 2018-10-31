@@ -3,6 +3,7 @@ import logging.config
 import datetime as dt
 import os
 import traceback
+import subprocess
 
 import click
 import toml
@@ -31,6 +32,16 @@ def train(config_path, env_id, device):
     os.makedirs(result_dir, exist_ok=True)
     with open(os.path.join(result_dir, 'config.toml'), 'w') as f:
         toml.dump(config, f)
+
+    # try to get google cloud compute engine machine type
+    try:
+        cmd = 'wget -q -O - --header Metadata-Flavor:Google metadata/computeMetadata/v1/instance/machine-type'
+        mtype = subprocess.run(cmd.split(), stdout=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError:
+        pass
+    else:
+        with open(os.path.join(result_dir, 'mtype.txt'), 'w') as f:
+            print(mtype, file=f)
 
     logging_config = toml.load('logging.toml')
     log_filename = logging_config['handlers']['file']['filename'].format(result_dir=result_dir)

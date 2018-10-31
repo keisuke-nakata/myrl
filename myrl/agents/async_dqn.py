@@ -1,6 +1,7 @@
 import logging
 import os
 import multiprocessing as mp
+import threading as th
 import queue
 
 import numpy as np
@@ -120,19 +121,30 @@ class AsyncDQNAgent:
         learner.dump_parameters(self.parameter_path)  # to sync the first parameter of learener's network with actor's one
         parameter_lock.release()
 
+        learner_local_queue = queue.Queue(self.config['learner_replay_queue_size'])
+
+        def fetch_batch(learner_replay_queue, learner_local_queue):
+            """fetches data from multiprcessing queue and put them into local queue"""
+            while True:
+                data = learner_replay_queue.get()
+                learner_local_queue.put(data)
+        fetch_thread = th.Thread(target=fetch_batch, args=(learner_replay_queue, learner_local_queue))
+
         ready_to_learn_event.wait()
 
+        fetch_thread.start()
         n_updates = 0
         while True:
             n_updates += 1
             if n_updates % self.config['learner']['target_network_update_freq_update'] == 0:
                 learner.update_target_network(soft=None)
-            batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = learner_replay_queue.get()  # this blocks
+            batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int = learner_local_queue.get()  # this blocks
             loss, td_error = learner.learn(batch_state_int, batch_action, batch_reward, batch_done, batch_next_state_int)
             learner_record_queue.put((loss, td_error))  # this blocks
             if n_updates % self.config['learner']['parameter_dump_freq_update'] == 0:
                 with parameter_lock:
                     learner.dump_parameters(self.parameter_path)
+        fetch_thread.join()
 
     def replay(self, actor_replay_queue, learner_replay_queue, ready_to_learn_event):
         multi_step_n = self.config.get('multi_step_n', None)
