@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 MAX_EACH_VIDEO_FRAMES = 5000
 
 
+def get_machine_type():
+    # try to get google cloud compute engine machine type
+    cmd = 'wget -q -O - --header Metadata-Flavor:Google metadata/computeMetadata/v1/instance/machine-type'
+    machine_type = subprocess.run(cmd.split(), stdout=subprocess.PIPE, check=True)
+    return machine_type
+
+
 def mimwrite(path, imgs):
     if len(imgs) < MAX_EACH_VIDEO_FRAMES:
         imageio.mimwrite(path, imgs, fps=60)

@@ -9,7 +9,7 @@ import click
 import toml
 
 from myrl.agents import build_agent
-from myrl.utils import visualize
+from myrl.utils import visualize, get_machine_type
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.argument('config_path', type=click.Path(exists=True))
 @click.argument('env_id')
-@click.option('--device', default=0, show_default=True, help='device id. -1: CPU, >=0: GPU (s).')
+@click.option('--device', default=0, show_default=True, help='device id. -1: CPU, >=0: GPU(s).')
 def train(config_path, env_id, device):
     """
     CONFIG_PATH: config filepath, e.g.: myrl/configs/vanilla_dqn.toml\n
@@ -35,13 +35,12 @@ def train(config_path, env_id, device):
 
     # try to get google cloud compute engine machine type
     try:
-        cmd = 'wget -q -O - --header Metadata-Flavor:Google metadata/computeMetadata/v1/instance/machine-type'
-        mtype = subprocess.run(cmd.split(), stdout=subprocess.PIPE, check=True)
+        machine_type = get_machine_type()
     except subprocess.CalledProcessError:
         pass
     else:
-        with open(os.path.join(result_dir, 'mtype.txt'), 'w') as f:
-            print(mtype, file=f)
+        with open(os.path.join(result_dir, 'machine_type.txt'), 'w') as f:
+            print(machine_type, file=f)
 
     logging_config = toml.load('logging.toml')
     log_filename = logging_config['handlers']['file']['filename'].format(result_dir=result_dir)
