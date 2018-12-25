@@ -83,15 +83,15 @@ class NoisyLinear(link.Link):
         dtype = self.mu_w.dtype
         out_size, in_size = self.mu_w.shape
         if self.factorized:
-            eps_in = self._eps(in_size, dtype)
-            eps_b = self._eps(out_size, dtype)
-            eps_w = self.xp.outer(eps_b, eps_in)
+            eps_i = self._eps(in_size, dtype)
+            eps_j = self._eps(out_size, dtype)
+            eps_w = self.xp.outer(eps_j, eps_i)
         else:
             eps_w = self._eps((out_size, in_size), dtype)
-            eps_b = self._eps(out_size, dtype)
+            eps_j = self._eps(out_size, dtype)
         W = self.mu_w + self.sigma_w * eps_w
         if self.mu_b is None:
             b = None
         else:
-            b = self.mu_b.reshape((out_size,)) + self.sigma_b * eps_b
+            b = self.mu_b.reshape((out_size,)) + self.sigma_b * eps_j
         return linear.linear(x, W, b)

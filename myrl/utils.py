@@ -21,11 +21,17 @@ logger = logging.getLogger(__name__)
 MAX_EACH_VIDEO_FRAMES = 5000
 
 
-def get_machine_type():
-    # try to get google cloud compute engine machine type
-    cmd = 'wget -q -O - --header Metadata-Flavor:Google metadata/computeMetadata/v1/instance/machine-type'
-    machine_type = subprocess.run(cmd.split(), stdout=subprocess.PIPE, check=True)
-    return machine_type
+def get_instance_info():
+    # try to get google cloud compute engine instance information
+    hostname = os.uname().nodename
+    zone_cmd = ['gcloud', 'compute', 'instances', 'list', '--filter', f'name=({hostname})', '--format', 'csv[no-heading](zone)']
+    zone = subprocess.run(zone_cmd, stdout=subprocess.PIPE, check=True).stdout.decode('ascii').strip()
+    instance_info_cmd = ['gcloud', 'compute', 'instances', 'describe', hostname, '--zone', zone]
+    instance_info = subprocess.run(instance_info_cmd, stdout=subprocess.PIPE, check=True).stdout.decode('ascii').strip()
+
+    df = subprocess.run(['df', '-h'], stdout=subprocess.PIPE, check=True).stdout.decode('ascii').strip()
+    instance_info += ('\n\n' + df)
+    return instance_info
 
 
 def mimwrite(path, imgs):

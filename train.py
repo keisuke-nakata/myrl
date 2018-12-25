@@ -9,7 +9,7 @@ import click
 import toml
 
 from myrl.agents import build_agent
-from myrl.utils import visualize, get_machine_type
+from myrl.utils import visualize, get_instance_info
 
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 @click.option('--device', default=0, show_default=True, help='device id. -1: CPU, >=0: GPU(s).')
 def train(config_path, env_id, device):
     """
-    CONFIG_PATH: config filepath, e.g.: myrl/configs/vanilla_dqn.toml\n
-    ENV_ID: OpenAI Gym environment id, e.g.: PongNoFrameskip-v4\n
+    \b
+    CONFIG_PATH: config filepath, e.g.: myrl/configs/vanilla_dqn.toml
+    ENV_ID: OpenAI Gym environment id, e.g.: PongNoFrameskip-v4
     """
     config = toml.load(config_path)
 
@@ -33,14 +34,14 @@ def train(config_path, env_id, device):
     with open(os.path.join(result_dir, 'config.toml'), 'w') as f:
         toml.dump(config, f)
 
-    # try to get google cloud compute engine machine type
+    # try to get google cloud compute engine instance information
     try:
-        machine_type = get_machine_type()
+        instance_info = get_instance_info()
     except subprocess.CalledProcessError:
         pass
     else:
-        with open(os.path.join(result_dir, 'machine_type.txt'), 'w') as f:
-            print(machine_type, file=f)
+        with open(os.path.join(result_dir, 'instance_info.txt'), 'w') as f:
+            print(instance_info, file=f)
 
     logging_config = toml.load('logging.toml')
     log_filename = logging_config['handlers']['file']['filename'].format(result_dir=result_dir)
